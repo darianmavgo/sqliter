@@ -1,0 +1,4 @@
+github.com/darianmavgo/banquet v0.0.0-20260120041833-a06f263496af h1:AnztmHj3HcwRfUuBG83mruDevz2uFEf0ctWEZSi6kIw=
+github.com/darianmavgo/banquet v0.0.0-20260120041833-a06f263496af/go.mod h1:BETwiDafZLzZUXvELiNk6v8bEVskmvyq9Z361SSMckk=
+github.com/mattn/go-sqlite3 v1.14.33 h1:A5blZ5ulQo2AtayQ9/limgHEkFreKj1Dv226a1K73s0=
+github.com/mattn/go-sqlite3 v1.14.33/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
