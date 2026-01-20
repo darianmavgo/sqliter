@@ -1,0 +1,158 @@
+package sqliter
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/darianmavgo/banquet"
+	_ "github.com/mattn/go-sqlite3"
+	"mavgo-flight/pkg/common"
+)
+
+// Server handles serving SQLite files.
+type Server struct {
+	config      *Config
+	tableWriter *TableWriter
+}
+
+// NewServer creates a new Server with the given configuration.
+func NewServer(cfg *Config) *Server {
+	t := LoadTemplates(cfg.TemplateDir)
+	return &Server{
+		config:      cfg,
+		tableWriter: NewTableWriter(t),
+	}
+}
+
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	bq, err := banquet.ParseNested(r.URL.String())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error parsing URL: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
+
+	if dataSetPath == "" {
+		s.listFiles(w)
+		return
+	}
+
+	// Security check: simple directory traversal prevention
+	if strings.Contains(dataSetPath, "..") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	dbPath := filepath.Join(s.config.DataDir, dataSetPath)
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		http.Error(w, "File not found: "+dataSetPath, http.StatusNotFound)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error opening DB: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if bq.Table == "sqlite_master" || bq.Table == "" {
+		s.listTables(w, db, bq.DataSetPath)
+	} else {
+		s.queryTable(w, db, bq)
+	}
+}
+
+func (s *Server) listFiles(w http.ResponseWriter) {
+	entries, err := os.ReadDir(s.config.DataDir)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	StartTableList(w)
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
+			WriteTableLink(w, entry.Name(), "/"+entry.Name())
+		}
+	}
+	EndTableList(w)
+}
+
+func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
+	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Ensure absolute path
+	if !strings.HasPrefix(dbUrlPath, "/") {
+		dbUrlPath = "/" + dbUrlPath
+	}
+
+	StartTableList(w)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			continue
+		}
+		// Link format: /dbfile.db/tablename
+		WriteTableLink(w, name, dbUrlPath+"/"+name)
+	}
+	EndTableList(w)
+}
+
+func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
+	query := common.ConstructSQL(bq)
+	log.Printf("Executing query: %s", query)
+
+	rows, err := db.Query(query)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Query error: %v\nQuery: %s", err, query), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting columns: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.tableWriter.StartHTMLTable(w, columns)
+
+	values := make([]interface{}, len(columns))
+	valuePtrs := make([]interface{}, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			log.Println("Error scanning row:", err)
+			continue
+		}
+
+		strValues := make([]string, len(columns))
+		for i, val := range values {
+			if val == nil {
+				strValues[i] = "NULL"
+			} else {
+				strValues[i] = fmt.Sprintf("%v", val)
+			}
+		}
+
+		s.tableWriter.WriteHTMLRow(w, strValues)
+	}
+
+	s.tableWriter.EndHTMLTable(w)
+}
