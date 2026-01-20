@@ -1,23 +1,37 @@
-package main
+package server
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
-	"mavgo-flight/pkg/server"
+	"github.com/darianmavgo/banquet"
+	_ "github.com/mattn/go-sqlite3"
+	"mavgo-flight/pkg/common"
 	"mavgo-flight/sqliter"
 )
 
-func main() {
-	cfg := sqliter.DefaultConfig()
-	srv := server.NewServer(cfg)
-
-	http.Handle("/", srv)
-	log.Println("Serving local sqlite files from sample_data at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+// Server handles serving SQLite files.
+type Server struct {
+	config      *sqliter.Config
+	tableWriter *sqliter.TableWriter
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
+// NewServer creates a new Server with the given configuration.
+func NewServer(cfg *sqliter.Config) *Server {
+	t := sqliter.LoadTemplates(cfg.TemplateDir)
+	return &Server{
+		config:      cfg,
+		tableWriter: sqliter.NewTableWriter(t),
+	}
+}
+
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bq, err := banquet.ParseNested(r.URL.String())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error parsing URL: %v", err), http.StatusBadRequest)
@@ -27,7 +41,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
 
 	if dataSetPath == "" {
-		listFiles(w)
+		s.listFiles(w)
 		return
 	}
 
@@ -37,7 +51,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbPath := filepath.Join("sample_data", dataSetPath)
+	dbPath := filepath.Join(s.config.DataDir, dataSetPath)
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		http.Error(w, "File not found: "+dataSetPath, http.StatusNotFound)
 		return
@@ -51,29 +65,29 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
-		listTables(w, db, bq.DataSetPath)
+		s.listTables(w, db, bq.DataSetPath)
 	} else {
-		queryTable(w, db, bq)
+		s.queryTable(w, db, bq)
 	}
 }
 
-func listFiles(w http.ResponseWriter) {
-	entries, err := os.ReadDir("sample_data")
+func (s *Server) listFiles(w http.ResponseWriter) {
+	entries, err := os.ReadDir(s.config.DataDir)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error reading sample_data: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	view.StartTableList(w)
+	sqliter.StartTableList(w)
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			view.WriteTableLink(w, entry.Name(), "/"+entry.Name())
+			sqliter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
 		}
 	}
-	view.EndTableList(w)
+	sqliter.EndTableList(w)
 }
 
-func listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
+func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
@@ -86,21 +100,21 @@ func listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
 		dbUrlPath = "/" + dbUrlPath
 	}
 
-	view.StartTableList(w)
+	sqliter.StartTableList(w)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			continue
 		}
 		// Link format: /dbfile.db/tablename
-		view.WriteTableLink(w, name, dbUrlPath+"/"+name)
+		sqliter.WriteTableLink(w, name, dbUrlPath+"/"+name)
 	}
-	view.EndTableList(w)
+	sqliter.EndTableList(w)
 }
 
-func queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
+func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
 	query := common.ConstructSQL(bq)
-	common.DebugLog(bq, query)
+	log.Printf("Executing query: %s", query)
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -115,10 +129,7 @@ func queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
 		return
 	}
 
-	w.Header().Set("X-Banquet", common.GetBanquetJSON(bq))
-	w.Header().Set("X-Query", query)
-
-	view.StartHTMLTable(w, columns)
+	s.tableWriter.StartHTMLTable(w, columns)
 
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))
@@ -141,8 +152,8 @@ func queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
 			}
 		}
 
-		view.WriteHTMLRow(w, strValues)
+		s.tableWriter.WriteHTMLRow(w, strValues)
 	}
 
-	view.EndHTMLTable(w)
+	s.tableWriter.EndHTMLTable(w)
 }

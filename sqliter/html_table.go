@@ -1,4 +1,4 @@
-package view
+package sqliter
 
 import (
 	"encoding/json"
@@ -7,47 +7,60 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sync"
 )
 
 var (
-	templates *template.Template
-	once      sync.Once
+	defaultTemplates *template.Template
+	once             sync.Once
 )
 
 func initTemplates() {
 	once.Do(func() {
-		// Define template functions
-		funcMap := template.FuncMap{
-			"json": func(v interface{}) template.JS {
-				a, _ := json.Marshal(v)
-				return template.JS(a)
-			},
-		}
-
-		// Parse templates with functions
-		t, err := template.New("base").Funcs(funcMap).ParseGlob("templates/*.html")
-		if err != nil {
-			log.Printf("Error loading templates: %v. Falling back to simple output.\n", err)
-			return
-		}
-		templates = t
+		defaultTemplates = LoadTemplates("templates")
 	})
 }
 
-// StartHTMLTable writes the initial HTML for a page with a table style and the table header.
-func StartHTMLTable(w io.Writer, headers []string) {
-	initTemplates()
+// LoadTemplates loads templates from the specified directory.
+func LoadTemplates(dir string) *template.Template {
+	// Define template functions
+	funcMap := template.FuncMap{
+		"json": func(v interface{}) template.JS {
+			a, _ := json.Marshal(v)
+			return template.JS(a)
+		},
+	}
 
-	if templates == nil {
-		// Fallback if templates failed to load
+	// Parse templates with functions
+	t, err := template.New("base").Funcs(funcMap).ParseGlob(filepath.Join(dir, "*.html"))
+	if err != nil {
+		log.Printf("Error loading templates from %s: %v. Falling back to simple output.\n", dir, err)
+		return nil
+	}
+	return t
+}
+
+// TableWriter handles writing HTML tables with configurable templates.
+type TableWriter struct {
+	templates *template.Template
+}
+
+// NewTableWriter creates a new TableWriter with the given templates.
+// If templates is nil, it will use fallback simple HTML.
+func NewTableWriter(t *template.Template) *TableWriter {
+	return &TableWriter{templates: t}
+}
+
+// StartHTMLTable writes the initial HTML for a page with a table style and the table header.
+func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
+	if tw.templates == nil {
 		fmt_StartHTMLTable(w, headers)
 		return
 	}
 
-	if err := templates.ExecuteTemplate(w, "head.html", headers); err != nil {
+	if err := tw.templates.ExecuteTemplate(w, "head.html", headers); err != nil {
 		log.Printf("Error executing head.html: %v\n", err)
-		// Fallback
 		fmt_StartHTMLTable(w, headers)
 		return
 	}
@@ -55,31 +68,29 @@ func StartHTMLTable(w io.Writer, headers []string) {
 }
 
 // WriteHTMLRow writes a single row to the HTML table.
-func WriteHTMLRow(w io.Writer, cells []string) error {
-	// initTemplates() // Should be initialized by StartHTMLTable already
-
-	if templates == nil {
+func (tw *TableWriter) WriteHTMLRow(w io.Writer, cells []string) error {
+	if tw.templates == nil {
 		fmt_WriteHTMLRow(w, cells)
 		return nil
 	}
 
-	if err := templates.ExecuteTemplate(w, "row.html", cells); err != nil {
+	if err := tw.templates.ExecuteTemplate(w, "row.html", cells); err != nil {
 		log.Printf("Error executing row.html: %v\n", err)
 		fmt_WriteHTMLRow(w, cells)
-		return err // Return the error
+		return err
 	}
 	flush(w)
 	return nil
 }
 
 // EndHTMLTable closes the table and HTML tags.
-func EndHTMLTable(w io.Writer) {
-	if templates == nil {
+func (tw *TableWriter) EndHTMLTable(w io.Writer) {
+	if tw.templates == nil {
 		fmt_EndHTMLTable(w)
 		return
 	}
 
-	if err := templates.ExecuteTemplate(w, "foot.html", nil); err != nil {
+	if err := tw.templates.ExecuteTemplate(w, "foot.html", nil); err != nil {
 		log.Printf("Error executing foot.html: %v\n", err)
 		fmt_EndHTMLTable(w)
 		return
@@ -87,7 +98,30 @@ func EndHTMLTable(w io.Writer) {
 	flush(w)
 }
 
-// --- List View Implementation ---
+// --- Global Functions (Backward Compatibility) ---
+
+// StartHTMLTable writes the initial HTML using default templates.
+func StartHTMLTable(w io.Writer, headers []string) {
+	initTemplates()
+	tw := &TableWriter{templates: defaultTemplates}
+	tw.StartHTMLTable(w, headers)
+}
+
+// WriteHTMLRow writes a single row using default templates.
+func WriteHTMLRow(w io.Writer, cells []string) error {
+	initTemplates()
+	tw := &TableWriter{templates: defaultTemplates}
+	return tw.WriteHTMLRow(w, cells)
+}
+
+// EndHTMLTable closes the table using default templates.
+func EndHTMLTable(w io.Writer) {
+	initTemplates()
+	tw := &TableWriter{templates: defaultTemplates}
+	tw.EndHTMLTable(w)
+}
+
+// --- List View Implementation (Currently not templated, shared) ---
 
 func StartTableList(w io.Writer) {
 	io.WriteString(w, `<!DOCTYPE html>
@@ -132,7 +166,7 @@ func flush(w io.Writer) {
 	}
 }
 
-// --- Fallback implementations (original code) ---
+// --- Fallback implementations ---
 
 func fmt_StartHTMLTable(w io.Writer, headers []string) {
 	io.WriteString(w, "<!DOCTYPE html><html><head><title>Data</title></head><body><table border='1'><thead><tr>")
