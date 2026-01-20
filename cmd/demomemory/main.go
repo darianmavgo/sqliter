@@ -94,7 +94,7 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 	query := common.ConstructSQL(bq)
 
     // Debug logging
-    log.Printf("Executing query: %s", query)
+    common.DebugLog(bq, query)
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -108,6 +108,9 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 		http.Error(w, fmt.Sprintf("Error getting columns: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("X-Banquet", common.GetBanquetJSON(bq))
+	w.Header().Set("X-Query", query)
 
 	view.StartHTMLTable(w, columns)
 
