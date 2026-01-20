@@ -11,8 +11,8 @@ import (
 
 	"github.com/darianmavgo/banquet"
 	_ "github.com/mattn/go-sqlite3"
-	"mavgo-flight/pkg/common"
-	"mavgo-flight/sqliter"
+	"github.com/darianmavgo/sqliter/pkg/common"
+	"github.com/darianmavgo/sqliter/sqliter"
 )
 
 // Server handles serving SQLite files.
@@ -40,24 +40,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
 
-	if dataSetPath == "" {
-		s.listFiles(w)
-		return
-	}
-
 	// Security check: simple directory traversal prevention
 	if strings.Contains(dataSetPath, "..") {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	dbPath := filepath.Join(s.config.DataDir, dataSetPath)
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+	if dataSetPath == "" {
+		s.listFiles(w, "")
+		return
+	}
+
+	fullPath := filepath.Join(s.config.DataDir, dataSetPath)
+	info, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
 		http.Error(w, "File not found: "+dataSetPath, http.StatusNotFound)
 		return
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	if info.IsDir() {
+		s.listFiles(w, dataSetPath)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", fullPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error opening DB: %v", err), http.StatusInternalServerError)
 		return
@@ -71,17 +77,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) listFiles(w http.ResponseWriter) {
-	entries, err := os.ReadDir(s.config.DataDir)
+func (s *Server) listFiles(w http.ResponseWriter, dirPath string) {
+	fullPath := filepath.Join(s.config.DataDir, dirPath)
+	entries, err := os.ReadDir(fullPath)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error reading directory: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Normalize dirPath for links
+	prefix := "/"
+	if dirPath != "" {
+		prefix = "/" + dirPath + "/"
 	}
 
 	sqliter.StartTableList(w)
 	for _, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			sqliter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
+		if entry.IsDir() {
+			sqliter.WriteTableLink(w, entry.Name()+"/", prefix+entry.Name())
+		} else if strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db") {
+			sqliter.WriteTableLink(w, entry.Name(), prefix+entry.Name())
 		}
 	}
 	sqliter.EndTableList(w)

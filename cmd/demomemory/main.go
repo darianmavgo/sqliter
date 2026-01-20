@@ -8,8 +8,8 @@ import (
 
 	"github.com/darianmavgo/banquet"
 	_ "github.com/mattn/go-sqlite3"
-	"mavgo-flight/pkg/common"
-	view "mavgo-flight/sqliter"
+	"github.com/darianmavgo/sqliter/pkg/common"
+	view "github.com/darianmavgo/sqliter/sqliter"
 )
 
 var db *sql.DB

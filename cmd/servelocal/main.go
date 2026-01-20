@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"mavgo-flight/pkg/server"
-	"mavgo-flight/sqliter"
+	"github.com/darianmavgo/sqliter/pkg/server"
+	"github.com/darianmavgo/sqliter/sqliter"
 )
 
 func main() {
