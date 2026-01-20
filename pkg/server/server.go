@@ -11,8 +11,8 @@ import (
 
 	"github.com/darianmavgo/banquet"
 	_ "github.com/mattn/go-sqlite3"
-	"mavgo-flight/pkg/common"
-	"mavgo-flight/sqliter"
+	"github.com/darianmavgo/sqliter/pkg/common"
+	"github.com/darianmavgo/sqliter/sqliter"
 )
 
 // Server handles serving SQLite files.
