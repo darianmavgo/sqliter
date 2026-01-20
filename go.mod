@@ -1,4 +1,4 @@
-module mavgo-flight
+module github.com/darianmavgo/sqliter
 
 go 1.24.3
 
