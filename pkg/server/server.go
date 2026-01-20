@@ -1,4 +1,4 @@
-package sqliter
+package server
 
 import (
 	"database/sql"
@@ -12,20 +12,21 @@ import (
 	"github.com/darianmavgo/banquet"
 	_ "github.com/mattn/go-sqlite3"
 	"mavgo-flight/pkg/common"
+	"mavgo-flight/sqliter"
 )
 
 // Server handles serving SQLite files.
 type Server struct {
-	config      *Config
-	tableWriter *TableWriter
+	config      *sqliter.Config
+	tableWriter *sqliter.TableWriter
 }
 
 // NewServer creates a new Server with the given configuration.
-func NewServer(cfg *Config) *Server {
-	t := LoadTemplates(cfg.TemplateDir)
+func NewServer(cfg *sqliter.Config) *Server {
+	t := sqliter.LoadTemplates(cfg.TemplateDir)
 	return &Server{
 		config:      cfg,
-		tableWriter: NewTableWriter(t),
+		tableWriter: sqliter.NewTableWriter(t),
 	}
 }
 
@@ -77,13 +78,13 @@ func (s *Server) listFiles(w http.ResponseWriter) {
 		return
 	}
 
-	StartTableList(w)
+	sqliter.StartTableList(w)
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			WriteTableLink(w, entry.Name(), "/"+entry.Name())
+			sqliter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
 		}
 	}
-	EndTableList(w)
+	sqliter.EndTableList(w)
 }
 
 func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
@@ -99,16 +100,16 @@ func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string)
 		dbUrlPath = "/" + dbUrlPath
 	}
 
-	StartTableList(w)
+	sqliter.StartTableList(w)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			continue
 		}
 		// Link format: /dbfile.db/tablename
-		WriteTableLink(w, name, dbUrlPath+"/"+name)
+		sqliter.WriteTableLink(w, name, dbUrlPath+"/"+name)
 	}
-	EndTableList(w)
+	sqliter.EndTableList(w)
 }
 
 func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
