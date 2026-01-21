@@ -1,0 +1,62 @@
+/* Container for the spreadsheet feel */
+.gs-container {
+    font-family: 'Roboto', Arial, sans-serif;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ccc;
+    display: inline-block;
+    background-color: #fff;
+}
+
+/* The Table Structure */
+.gs-table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Header Cells (The A, B, C and 1, 2, 3 areas) */
+.gs-table th,
+.gs-row-head {
+    background-color: #f8f9fa;
+    color: #666;
+    font-weight: normal;
+    text-align: center;
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    user-select: none;
+}
+
+/* Standard Data Cells */
+.gs-table td {
+    border: 1px solid #e2e2e2;
+    /* Light gray gridlines */
+    padding: 4px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    height: 20px;
+}
+
+/* Simulate the "Selected" cell */
+.gs-table td.active {
+    outline: 2px solid #1a73e8;
+    /* Google Blue */
+    outline-offset: -2px;
+    background-color: #e8f0fe;
+}
+
+/* Row hover effect */
+.gs-table tr:hover .gs-row-head {
+    background-color: #e8eaed;
+    color: #000;
+}
+
+/* Input simulation for cells */
+.gs-cell-input {
+    border: none;
+    outline: none;
+    width: 100%;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+}

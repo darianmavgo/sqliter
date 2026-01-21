@@ -18,14 +18,19 @@ type Config struct {
 	// StickyHeader enables or disables the sticky header feature for the HTML table.
 	// Defaults to true.
 	StickyHeader bool `json:"sticky_header"`
+
+	// AutoRedirectSingleTable enables or disables automatic redirection when a database has only one table.
+	// Defaults to true.
+	AutoRedirectSingleTable bool `json:"auto_redirect_single_table"`
 }
 
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	return &Config{
-		DataDir:      "sample_data",
-		TemplateDir:  "templates",
-		StickyHeader: true,
+		DataDir:                 "sample_data",
+		TemplateDir:             "templates",
+		StickyHeader:            true,
+		AutoRedirectSingleTable: true,
 	}
 }
 

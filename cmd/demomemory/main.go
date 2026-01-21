@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/darianmavgo/banquet"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/darianmavgo/sqliter/pkg/common"
 	view "github.com/darianmavgo/sqliter/sqliter"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var db *sql.DB
@@ -50,7 +50,7 @@ func initDB(db *sql.DB) {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	// Parse URL using Banquet
-    // ParseNested expects the URL string
+	// ParseNested expects the URL string
 	bq, err := banquet.ParseNested(r.URL.String())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error parsing URL: %v", err), http.StatusBadRequest)
@@ -58,9 +58,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no table is specified, list tables
-    // banquet sometimes returns empty table if parsing fails to find one
+	// banquet sometimes returns empty table if parsing fails to find one
 	if bq.Table == "" {
-		listTables(w)
+		listTables(w, r)
 		return
 	}
 
@@ -68,7 +68,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	queryTable(w, bq)
 }
 
-func listTables(w http.ResponseWriter) {
+func listTables(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
@@ -76,14 +76,25 @@ func listTables(w http.ResponseWriter) {
 	}
 	defer rows.Close()
 
-	view.StartTableList(w)
+	var tables []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			continue
 		}
+		tables = append(tables, name)
+	}
+
+	// Simulate AutoRedirectSingleTable = true for demo
+	if len(tables) == 1 {
+		http.Redirect(w, r, "/"+tables[0], http.StatusFound)
+		return
+	}
+
+	view.StartTableList(w)
+	for _, name := range tables {
 		// Link to the table.
-        // If we are at root, link is /name
+		// If we are at root, link is /name
 		view.WriteTableLink(w, name, "/"+name)
 	}
 	view.EndTableList(w)
@@ -93,8 +104,8 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 	// Construct SQL
 	query := common.ConstructSQL(bq)
 
-    // Debug logging
-    common.DebugLog(bq, query)
+	// Debug logging
+	common.DebugLog(bq, query)
 
 	rows, err := db.Query(query)
 	if err != nil {

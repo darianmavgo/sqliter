@@ -65,7 +65,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
-		s.listTables(w, db, bq.DataSetPath)
+		s.listTables(w, r, db, bq.DataSetPath)
 	} else {
 		s.queryTable(w, db, bq)
 	}
@@ -87,7 +87,7 @@ func (s *Server) listFiles(w http.ResponseWriter) {
 	sqliter.EndTableList(w)
 }
 
-func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string) {
+func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string) {
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
@@ -100,12 +100,31 @@ func (s *Server) listTables(w http.ResponseWriter, db *sql.DB, dbUrlPath string)
 		dbUrlPath = "/" + dbUrlPath
 	}
 
-	sqliter.StartTableList(w)
+	// Ensure absolute path
+	if !strings.HasPrefix(dbUrlPath, "/") {
+		dbUrlPath = "/" + dbUrlPath
+	}
+
+	var tables []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			continue
 		}
+		tables = append(tables, name)
+	}
+
+	// Auto-redirect if enabled and only one table
+	if s.config.AutoRedirectSingleTable && len(tables) == 1 {
+		redirectUrl := dbUrlPath + "/" + tables[0]
+		// Clean up double slashes just in case
+		redirectUrl = strings.ReplaceAll(redirectUrl, "//", "/")
+		http.Redirect(w, r, redirectUrl, http.StatusFound)
+		return
+	}
+
+	sqliter.StartTableList(w)
+	for _, name := range tables {
 		// Link format: /dbfile.db/tablename
 		sqliter.WriteTableLink(w, name, dbUrlPath+"/"+name)
 	}

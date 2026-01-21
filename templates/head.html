@@ -61,18 +61,52 @@
       border-color: #495057;
       color: #6c757d;
     }
+
     /* Sticky Header */
-    {{if .StickyHeader}}
+      {
+        {
+        if .StickyHeader
+      }
+    }
+
     th {
       position: sticky;
       top: 0;
-      background: #212529; /* Match body bg to avoid transparency */
+      background: #212529;
+      /* Match body bg to avoid transparency */
       z-index: 1000;
-        /* Ensure border is visible */
-        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+      /* Ensure border is visible */
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
     }
-    {{end}}
+
+    /* 
+       Bootstrap Table wraps the table in .fixed-table-body with overflow: auto.
+       This prevents position: sticky from working relative to the window.
+       We must override this to visible.
+    */
+    .fixed-table-body {
+      overflow: visible !important;
+    }
+
+    /* 
+       User suggested fix for sticky header borders
+       Border-collapse: separate prevents borders from disappearing or mismatching during scroll 
+    */
+    .table {
+      border-collapse: separate !important;
+      border-spacing: 0;
+    }
+
+      {
+        {
+        end
+      }
+    }
   </style>
+  {{/*
+  We need to be careful with Bootstrap Table's specific DOM manipulation.
+  It might be better to just disable the plugin's attempts to manage scrolling if we want window scrolling.
+  */}}
 </head>
 
 <body>
