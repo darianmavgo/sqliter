@@ -14,6 +14,7 @@ func main() {
 
 	// Serve static files for the theme
 	http.Handle("/style1/", http.StripPrefix("/style1/", http.FileServer(http.Dir("themes/style1"))))
+	http.Handle("/extensions/", http.StripPrefix("/extensions/", http.FileServer(http.Dir("extensions"))))
 
 	http.Handle("/", srv)
 	log.Println("Serving local sqlite files from sample_data at http://localhost:8080")

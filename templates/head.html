@@ -4,26 +4,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flight Data</title>
+  <title>{{.Table}}</title>
 
-  <!-- Theme CSS (includes Bootstrap and Overrides) -->
-  <link href="{{.StyleSheet}}" rel="stylesheet">
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/fixedheader/3.4.0/css/fixedHeader.dataTables.min.css">
 
-  <!-- Bootstrap Table CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/bootstrap-table@1.22.1/dist/bootstrap-table.min.css">
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+    }
 
-  {{/*
-  We need to be careful with Bootstrap Table's specific DOM manipulation.
-  It might be better to just disable the plugin's attempts to manage scrolling if we want window scrolling.
-  */}}
+    .container-fluid {
+      padding: 10px;
+    }
+
+    table.dataTable thead th {
+      background-color: #f8f9fa;
+    }
+  </style>
 </head>
 
-<body class="{{if .StickyHeader}}sticky-header{{end}}">
+<body>
 
-  <div class="container-fluid p-0">
-    <table id="table" data-toggle="table" data-search="false" data-pagination="true" data-show-columns="false"
-      data-page-size="1000" data-page-list="[100, 500, 1000, all]" data-sortable="true"
-      data-classes="table table-sm table-hover table-striped mb-0 text-nowrap">
+  <div class="container-fluid">
+    <table id="table" class="display nowrap" style="width:100%">
       <thead>
         <tr>
           {{ range .Headers}}

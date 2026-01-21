@@ -2,13 +2,22 @@
 </table>
 </div>
 </div>
-
-<!-- jQuery (required for Bootstrap Table) -->
+<!-- jQuery (Required for DataTables) -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<!-- Bootstrap Bundle JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Bootstrap Table JS -->
-<script src="https://unpkg.com/bootstrap-table@1.22.1/dist/bootstrap-table.min.js"></script>
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/fixedheader/3.4.0/js/dataTables.fixedHeader.min.js"></script>
+
+<script>
+    $(document).ready(function () {
+        $('#table').DataTable({
+            paging: true,
+            pageLength: 100,
+            fixedHeader: true,
+            order: [] // Preserve server-side order if any
+        });
+    });
+</script>
 
 </body>
 
