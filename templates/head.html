@@ -4,33 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{.Table}}</title>
+  <title>SQLITER</title>
 
-  <!-- DataTables CSS -->
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
-  <link rel="stylesheet" href="https://cdn.datatables.net/fixedheader/3.4.0/css/fixedHeader.dataTables.min.css">
-
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container-fluid {
-      padding: 10px;
-    }
-
-    table.dataTable thead th {
-      background-color: #f8f9fa;
-    }
-  </style>
+  <!-- Custom Table Logic -->
+  <link rel="stylesheet" href="/cssjs/default.css">
 </head>
 
 <body>
 
   <div class="container-fluid">
-    <table id="table" class="display nowrap" style="width:100%">
+    <table id="table">
       <thead>
         <tr>
           {{ range .Headers}}
