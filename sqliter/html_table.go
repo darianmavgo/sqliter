@@ -2,7 +2,6 @@ package sqliter
 
 import (
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -60,6 +59,18 @@ func NewTableWriter(t *template.Template, cfg *Config) *TableWriter {
 type HeadData struct {
 	Headers      []string
 	StickyHeader bool
+	StyleSheet   string
+}
+
+// ListData is the data passed to the list_head.html template.
+type ListData struct {
+	StyleSheet string
+}
+
+// ListItemData is the data passed to the list_item.html template.
+type ListItemData struct {
+	Name string
+	URL  string
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
@@ -72,11 +83,65 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
 	data := HeadData{
 		Headers:      headers,
 		StickyHeader: tw.config.StickyHeader,
+		StyleSheet:   tw.config.StyleSheet,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "head.html", data); err != nil {
 		log.Printf("Error executing head.html: %v\n", err)
 		fmt_StartHTMLTable(w, headers)
+		return
+	}
+	flush(w)
+}
+
+// StartTableList writes the initial HTML for a list of tables.
+func (tw *TableWriter) StartTableList(w io.Writer) {
+	if tw.templates == nil {
+		fmt_StartTableList(w)
+		return
+	}
+
+	data := ListData{
+		StyleSheet: tw.config.StyleSheet,
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "list_head.html", data); err != nil {
+		log.Printf("Error executing list_head.html: %v\n", err)
+		fmt_StartTableList(w)
+		return
+	}
+	flush(w)
+}
+
+// WriteTableLink writes a link to a table.
+func (tw *TableWriter) WriteTableLink(w io.Writer, name, url string) error {
+	if tw.templates == nil {
+		return fmt_WriteTableLink(w, name, url)
+	}
+
+	data := ListItemData{
+		Name: name,
+		URL:  url,
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "list_item.html", data); err != nil {
+		log.Printf("Error executing list_item.html: %v\n", err)
+		return fmt_WriteTableLink(w, name, url)
+	}
+	flush(w)
+	return nil
+}
+
+// EndTableList closes the list view.
+func (tw *TableWriter) EndTableList(w io.Writer) {
+	if tw.templates == nil {
+		fmt_EndTableList(w)
+		return
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "list_foot.html", nil); err != nil {
+		log.Printf("Error executing list_foot.html: %v\n", err)
+		fmt_EndTableList(w)
 		return
 	}
 	flush(w)
@@ -139,40 +204,24 @@ func EndHTMLTable(w io.Writer) {
 	tw.EndHTMLTable(w)
 }
 
-// --- List View Implementation (Currently not templated, shared) ---
+// --- List View Implementation (Wrapped) ---
 
 func StartTableList(w io.Writer) {
-	io.WriteString(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="/style1/stylesheet.css" rel="stylesheet">
-  <style>
-    body { padding: 20px; }
-    h3 { margin-bottom: 20px; border-bottom: 1px solid #495057; padding-bottom: 10px; }
-    a { text-decoration: none; font-family: monospace; font-size: 1.1em; }
-  </style>
-</head>
-<body>
-<div class="container" style="max-width: 800px;">
-  <div class="list-group">
-`)
-	flush(w)
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
+	tw.StartTableList(w)
 }
 
 func WriteTableLink(w io.Writer, name, url string) error {
-	_, err := fmt.Fprintf(w, `<a href="%s" class="list-group-item list-group-item-action">%s</a>`, url, name)
-	if err != nil {
-		return err
-	}
-	flush(w)
-	return nil
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
+	return tw.WriteTableLink(w, name, url)
 }
 
 func EndTableList(w io.Writer) {
-	io.WriteString(w, `</div></div></body></html>`)
-	flush(w)
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
+	tw.EndTableList(w)
 }
 
 func flush(w io.Writer) {
@@ -181,27 +230,3 @@ func flush(w io.Writer) {
 	}
 }
 
-// --- Fallback implementations ---
-
-func fmt_StartHTMLTable(w io.Writer, headers []string) {
-	io.WriteString(w, "<!DOCTYPE html><html><head><title>Data</title></head><body><table border='1'><thead><tr>")
-	for _, h := range headers {
-		io.WriteString(w, "<th>"+h+"</th>")
-	}
-	io.WriteString(w, "</tr></thead><tbody>")
-	flush(w)
-}
-
-func fmt_WriteHTMLRow(w io.Writer, cells []string) {
-	io.WriteString(w, "<tr>")
-	for _, c := range cells {
-		io.WriteString(w, "<td>"+c+"</td>")
-	}
-	io.WriteString(w, "</tr>")
-	flush(w)
-}
-
-func fmt_EndHTMLTable(w io.Writer) {
-	io.WriteString(w, "</tbody></table></body></html>")
-	flush(w)
-}

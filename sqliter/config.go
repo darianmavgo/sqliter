@@ -22,6 +22,10 @@ type Config struct {
 	// AutoRedirectSingleTable enables or disables automatic redirection when a database has only one table.
 	// Defaults to true.
 	AutoRedirectSingleTable bool `json:"auto_redirect_single_table"`
+
+	// StyleSheet is the URL path to the CSS stylesheet.
+	// Defaults to "/style1/stylesheet.css".
+	StyleSheet string `json:"stylesheet"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -31,6 +35,7 @@ func DefaultConfig() *Config {
 		TemplateDir:             "templates",
 		StickyHeader:            true,
 		AutoRedirectSingleTable: true,
+		StyleSheet:              "/style1/stylesheet.css",
 	}
 }
 
@@ -55,6 +60,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.TemplateDir == "" {
 		cfg.TemplateDir = "templates"
+	}
+	if cfg.StyleSheet == "" {
+		cfg.StyleSheet = "/style1/stylesheet.css"
 	}
 
 	return cfg, nil
