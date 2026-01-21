@@ -147,14 +147,11 @@ func StartTableList(w io.Writer) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/style1/stylesheet.css" rel="stylesheet">
   <style>
-    body { padding: 20px; background-color: #212529; color: #f8f9fa; }
+    body { padding: 20px; }
     h3 { margin-bottom: 20px; border-bottom: 1px solid #495057; padding-bottom: 10px; }
-    a { text-decoration: none; color: #6ea8fe; font-family: monospace; font-size: 1.1em; }
-    a:hover { color: #fff; }
-    .list-group-item-dark { background-color: #2c3034; border-color: #373b3e; color: #dee2e6; }
-    .list-group-item-action:hover { background-color: #343a40; color: #fff; }
+    a { text-decoration: none; font-family: monospace; font-size: 1.1em; }
   </style>
 </head>
 <body>
@@ -165,7 +162,7 @@ func StartTableList(w io.Writer) {
 }
 
 func WriteTableLink(w io.Writer, name, url string) error {
-	_, err := fmt.Fprintf(w, `<a href="%s" class="list-group-item list-group-item-action list-group-item-dark">%s</a>`, url, name)
+	_, err := fmt.Fprintf(w, `<a href="%s" class="list-group-item list-group-item-action">%s</a>`, url, name)
 	if err != nil {
 		return err
 	}
