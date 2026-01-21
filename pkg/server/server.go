@@ -78,13 +78,13 @@ func (s *Server) listFiles(w http.ResponseWriter) {
 		return
 	}
 
-	sqliter.StartTableList(w)
+	s.tableWriter.StartTableList(w)
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			sqliter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
+			s.tableWriter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
 		}
 	}
-	sqliter.EndTableList(w)
+	s.tableWriter.EndTableList(w)
 }
 
 func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string) {
@@ -123,12 +123,12 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		return
 	}
 
-	sqliter.StartTableList(w)
+	s.tableWriter.StartTableList(w)
 	for _, name := range tables {
 		// Link format: /dbfile.db/tablename
-		sqliter.WriteTableLink(w, name, dbUrlPath+"/"+name)
+		s.tableWriter.WriteTableLink(w, name, dbUrlPath+"/"+name)
 	}
-	sqliter.EndTableList(w)
+	s.tableWriter.EndTableList(w)
 }
 
 func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {

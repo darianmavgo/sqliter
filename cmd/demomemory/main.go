@@ -25,6 +25,9 @@ func main() {
 	// Initialize Database
 	initDB(db)
 
+	// Serve static files for the theme
+	http.Handle("/style1/", http.StripPrefix("/style1/", http.FileServer(http.Dir("themes/style1"))))
+
 	http.HandleFunc("/", handler)
 	log.Println("Serving in-memory database at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
