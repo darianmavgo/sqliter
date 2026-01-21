@@ -14,13 +14,18 @@ type Config struct {
 	// TemplateDir is the directory containing the HTML templates.
 	// Defaults to "templates".
 	TemplateDir string `json:"template_dir"`
+
+	// StickyHeader enables or disables the sticky header feature for the HTML table.
+	// Defaults to true.
+	StickyHeader bool `json:"sticky_header"`
 }
 
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	return &Config{
-		DataDir:     "sample_data",
-		TemplateDir: "templates",
+		DataDir:      "sample_data",
+		TemplateDir:  "templates",
+		StickyHeader: true,
 	}
 }
 
@@ -32,7 +37,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	defer f.Close()
 
-	cfg := &Config{}
+	defer f.Close()
+
+	cfg := DefaultConfig()
 	if err := json.NewDecoder(f).Decode(cfg); err != nil {
 		return nil, err
 	}

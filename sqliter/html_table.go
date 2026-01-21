@@ -44,12 +44,22 @@ func LoadTemplates(dir string) *template.Template {
 // TableWriter handles writing HTML tables with configurable templates.
 type TableWriter struct {
 	templates *template.Template
+	config    *Config
 }
 
 // NewTableWriter creates a new TableWriter with the given templates.
 // If templates is nil, it will use fallback simple HTML.
-func NewTableWriter(t *template.Template) *TableWriter {
-	return &TableWriter{templates: t}
+func NewTableWriter(t *template.Template, cfg *Config) *TableWriter {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	return &TableWriter{templates: t, config: cfg}
+}
+
+// HeadData is the data passed to the head.html template.
+type HeadData struct {
+	Headers      []string
+	StickyHeader bool
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
@@ -59,7 +69,12 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
 		return
 	}
 
-	if err := tw.templates.ExecuteTemplate(w, "head.html", headers); err != nil {
+	data := HeadData{
+		Headers:      headers,
+		StickyHeader: tw.config.StickyHeader,
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "head.html", data); err != nil {
 		log.Printf("Error executing head.html: %v\n", err)
 		fmt_StartHTMLTable(w, headers)
 		return
@@ -103,21 +118,24 @@ func (tw *TableWriter) EndHTMLTable(w io.Writer) {
 // StartHTMLTable writes the initial HTML using default templates.
 func StartHTMLTable(w io.Writer, headers []string) {
 	initTemplates()
-	tw := &TableWriter{templates: defaultTemplates}
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
 	tw.StartHTMLTable(w, headers)
 }
 
 // WriteHTMLRow writes a single row using default templates.
 func WriteHTMLRow(w io.Writer, cells []string) error {
 	initTemplates()
-	tw := &TableWriter{templates: defaultTemplates}
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
 	return tw.WriteHTMLRow(w, cells)
 }
 
 // EndHTMLTable closes the table using default templates.
 func EndHTMLTable(w io.Writer) {
 	initTemplates()
-	tw := &TableWriter{templates: defaultTemplates}
+	initTemplates()
+	tw := NewTableWriter(defaultTemplates, DefaultConfig())
 	tw.EndHTMLTable(w)
 }
 

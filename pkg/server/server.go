@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/darianmavgo/banquet"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/darianmavgo/sqliter/pkg/common"
 	"github.com/darianmavgo/sqliter/sqliter"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Server handles serving SQLite files.
@@ -26,7 +26,7 @@ func NewServer(cfg *sqliter.Config) *Server {
 	t := sqliter.LoadTemplates(cfg.TemplateDir)
 	return &Server{
 		config:      cfg,
-		tableWriter: sqliter.NewTableWriter(t),
+		tableWriter: sqliter.NewTableWriter(t, cfg),
 	}
 }
 

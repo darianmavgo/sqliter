@@ -61,6 +61,17 @@
       border-color: #495057;
       color: #6c757d;
     }
+    /* Sticky Header */
+    {{if .StickyHeader}}
+    th {
+      position: sticky;
+      top: 0;
+      background: #212529; /* Match body bg to avoid transparency */
+      z-index: 1000;
+        /* Ensure border is visible */
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+    }
+    {{end}}
   </style>
 </head>
 
@@ -72,7 +83,7 @@
       data-classes="table table-dark table-sm table-hover table-striped mb-0 text-nowrap">
       <thead>
         <tr>
-          {{ range .}}
+          {{ range .Headers}}
           <th data-sortable="true">{{ .}}</th>
           {{ end}}
         </tr>
