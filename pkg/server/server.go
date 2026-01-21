@@ -78,7 +78,10 @@ func (s *Server) listFiles(w http.ResponseWriter) {
 		return
 	}
 
-	s.tableWriter.StartTableList(w)
+	// Root listing has no dataset path
+	title := ""
+
+	s.tableWriter.StartTableList(w, title)
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
 			s.tableWriter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
@@ -123,7 +126,8 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		return
 	}
 
-	s.tableWriter.StartTableList(w)
+	title := filepath.Base(dbUrlPath)
+	s.tableWriter.StartTableList(w, title)
 	for _, name := range tables {
 		// Link format: /dbfile.db/tablename
 		s.tableWriter.WriteTableLink(w, name, dbUrlPath+"/"+name)
@@ -148,7 +152,8 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		return
 	}
 
-	s.tableWriter.StartHTMLTable(w, columns)
+	title := filepath.Base(bq.DataSetPath)
+	s.tableWriter.StartHTMLTable(w, columns, title)
 
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))

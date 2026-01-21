@@ -60,11 +60,13 @@ type HeadData struct {
 	Headers      []string
 	StickyHeader bool
 	StyleSheet   string
+	Title        string
 }
 
 // ListData is the data passed to the list_head.html template.
 type ListData struct {
 	StyleSheet string
+	Title      string
 }
 
 // ListItemData is the data passed to the list_item.html template.
@@ -74,7 +76,7 @@ type ListItemData struct {
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
-func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
+func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title string) {
 	if tw.templates == nil {
 		fmt_StartHTMLTable(w, headers)
 		return
@@ -84,6 +86,7 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
 		Headers:      headers,
 		StickyHeader: tw.config.StickyHeader,
 		StyleSheet:   tw.config.StyleSheet,
+		Title:        title,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "head.html", data); err != nil {
@@ -95,7 +98,7 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string) {
 }
 
 // StartTableList writes the initial HTML for a list of tables.
-func (tw *TableWriter) StartTableList(w io.Writer) {
+func (tw *TableWriter) StartTableList(w io.Writer, title string) {
 	if tw.templates == nil {
 		fmt_StartTableList(w)
 		return
@@ -103,6 +106,7 @@ func (tw *TableWriter) StartTableList(w io.Writer) {
 
 	data := ListData{
 		StyleSheet: tw.config.StyleSheet,
+		Title:      title,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "list_head.html", data); err != nil {
@@ -181,11 +185,11 @@ func (tw *TableWriter) EndHTMLTable(w io.Writer) {
 // --- Global Functions (Backward Compatibility) ---
 
 // StartHTMLTable writes the initial HTML using default templates.
-func StartHTMLTable(w io.Writer, headers []string) {
+func StartHTMLTable(w io.Writer, headers []string, title string) {
 	initTemplates()
 	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	tw.StartHTMLTable(w, headers)
+	tw.StartHTMLTable(w, headers, title)
 }
 
 // WriteHTMLRow writes a single row using default templates.
@@ -206,10 +210,10 @@ func EndHTMLTable(w io.Writer) {
 
 // --- List View Implementation (Wrapped) ---
 
-func StartTableList(w io.Writer) {
+func StartTableList(w io.Writer, title string) {
 	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	tw.StartTableList(w)
+	tw.StartTableList(w, title)
 }
 
 func WriteTableLink(w io.Writer, name, url string) error {
@@ -229,4 +233,3 @@ func flush(w io.Writer) {
 		f.Flush()
 	}
 }
-

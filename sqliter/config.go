@@ -35,7 +35,7 @@ func DefaultConfig() *Config {
 		TemplateDir:             "templates",
 		StickyHeader:            true,
 		AutoRedirectSingleTable: true,
-		StyleSheet:              "/style1/stylesheet.css",
+		StyleSheet:              "/cssjs/default.css",
 	}
 }
 
@@ -45,8 +45,6 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
 	defer f.Close()
 
 	cfg := DefaultConfig()
@@ -62,7 +60,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.TemplateDir = "templates"
 	}
 	if cfg.StyleSheet == "" {
-		cfg.StyleSheet = "/style1/stylesheet.css"
+		cfg.StyleSheet = "/cssjs/default.css"
 	}
 
 	return cfg, nil

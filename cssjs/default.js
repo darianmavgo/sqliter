@@ -1,4 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Update title if it's the default SQLITER
+    if (document.title === 'SQLITER') {
+        const urlPath = window.location.pathname;
+        const shortPath = urlPath.length > 80 ? '...' + urlPath.slice(-77) : urlPath;
+        document.title = shortPath || 'SQLITER';
+    }
+
     const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
 
     const comparer = (idx, asc) => (a, b) => ((v1, v2) =>

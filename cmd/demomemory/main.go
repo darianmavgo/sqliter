@@ -94,7 +94,7 @@ func listTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view.StartTableList(w)
+	view.StartTableList(w, "")
 	for _, name := range tables {
 		// Link to the table.
 		// If we are at root, link is /name
@@ -126,7 +126,7 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 	w.Header().Set("X-Banquet", common.GetBanquetJSON(bq))
 	w.Header().Set("X-Query", query)
 
-	view.StartHTMLTable(w, columns)
+	view.StartHTMLTable(w, columns, bq.Table)
 
 	// Prepare a slice of interface{} to hold values
 	values := make([]interface{}, len(columns))
