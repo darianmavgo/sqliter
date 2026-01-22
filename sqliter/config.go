@@ -26,6 +26,9 @@ type Config struct {
 	// StyleSheet is the URL path to the CSS stylesheet.
 	// Defaults to "/style1/stylesheet.css".
 	StyleSheet string `json:"stylesheet"`
+
+	// Verbose enables detailed logging for the server.
+	Verbose bool `json:"verbose"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -36,6 +39,7 @@ func DefaultConfig() *Config {
 		StickyHeader:            true,
 		AutoRedirectSingleTable: true,
 		StyleSheet:              "/style1/stylesheet.css",
+		Verbose:                 false,
 	}
 }
 

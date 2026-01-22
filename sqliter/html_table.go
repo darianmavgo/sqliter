@@ -31,10 +31,11 @@ func LoadTemplates(dir string) *template.Template {
 		},
 	}
 
+	absDir, _ := filepath.Abs(dir)
 	// Parse templates with functions
 	t, err := template.New("base").Funcs(funcMap).ParseGlob(filepath.Join(dir, "*.html"))
 	if err != nil {
-		log.Printf("Error loading templates from %s: %v. Falling back to simple output.\n", dir, err)
+		log.Printf("Error loading templates from %s (%s): %v. Falling back to simple output.\n", dir, absDir, err)
 		return nil
 	}
 	return t
@@ -78,7 +79,13 @@ type ListItemData struct {
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
 func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title string) {
+	if tw.config.Verbose {
+		log.Printf("[SQLITER] Starting HTML table: %s with %d headers", title, len(headers))
+	}
 	if tw.templates == nil {
+		if tw.config.Verbose {
+			log.Printf("[SQLITER] No templates found, using fallback simple table.")
+		}
 		fmt_StartHTMLTable(w, headers)
 		return
 	}
@@ -100,6 +107,9 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 
 // StartTableList writes the initial HTML for a list of tables.
 func (tw *TableWriter) StartTableList(w io.Writer, title string) {
+	if tw.config.Verbose {
+		log.Printf("[SQLITER] Starting table list: %s", title)
+	}
 	if tw.templates == nil {
 		fmt_StartTableList(w)
 		return
