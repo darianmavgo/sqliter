@@ -35,8 +35,13 @@ func fmt_StartTableList(w io.Writer) {
 	flush(w)
 }
 
-func fmt_WriteTableLink(w io.Writer, name, url string) error {
-	_, err := fmt.Fprintf(w, "<li><a href='%s'>%s</a></li>", url, name)
+func fmt_WriteTableLink(w io.Writer, name, url, kind string) error {
+	var err error
+	if kind != "" {
+		_, err = fmt.Fprintf(w, "<li><a href='%s'>%s</a> (%s)</li>", url, name, kind)
+	} else {
+		_, err = fmt.Fprintf(w, "<li><a href='%s'>%s</a></li>", url, name)
+	}
 	return err
 }
 

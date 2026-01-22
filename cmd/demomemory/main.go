@@ -45,6 +45,8 @@ func initDB(db *sql.DB) {
 		INSERT INTO products (name, price) VALUES ('Laptop', 999.99);
 		INSERT INTO products (name, price) VALUES ('Mouse', 19.99);
 		INSERT INTO products (name, price) VALUES ('Keyboard', 49.99);
+
+		CREATE VIEW user_names AS SELECT name FROM users;
 	`)
 	if err != nil {
 		log.Fatal("Failed to init DB:", err)
@@ -72,33 +74,38 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func listTables(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var tables []string
+	type TableInfo struct {
+		Name string
+		Type string
+	}
+
+	var tables []TableInfo
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var name, type_ string
+		if err := rows.Scan(&name, &type_); err != nil {
 			continue
 		}
-		tables = append(tables, name)
+		tables = append(tables, TableInfo{Name: name, Type: type_})
 	}
 
 	// Simulate AutoRedirectSingleTable = true for demo
 	if len(tables) == 1 {
-		http.Redirect(w, r, "/"+tables[0], http.StatusFound)
+		http.Redirect(w, r, "/"+tables[0].Name, http.StatusFound)
 		return
 	}
 
 	view.StartTableList(w, "")
-	for _, name := range tables {
+	for _, t := range tables {
 		// Link to the table.
 		// If we are at root, link is /name
-		view.WriteTableLink(w, name, "/"+name)
+		view.WriteTableLink(w, t.Name, "/"+t.Name, t.Type)
 	}
 	view.EndTableList(w)
 }
