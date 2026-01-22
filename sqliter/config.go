@@ -65,3 +65,17 @@ func LoadConfig(path string) (*Config, error) {
 
 	return cfg, nil
 }
+
+// ExportCurrentConfig returns the JSON representation of the current configuration.
+func (c *Config) ExportCurrentConfig() (string, error) {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// ExportDefaultConfig returns the JSON representation of the default configuration.
+func ExportDefaultConfig() (string, error) {
+	return DefaultConfig().ExportCurrentConfig()
+}

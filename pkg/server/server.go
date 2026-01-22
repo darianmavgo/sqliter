@@ -38,10 +38,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	title := strings.TrimPrefix(r.URL.Path, "/")
 	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
 
 	if dataSetPath == "" {
-		s.listFiles(w)
+		s.listFiles(w, title)
 		return
 	}
 
@@ -65,21 +66,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
-		s.listTables(w, r, db, bq.DataSetPath)
+		s.listTables(w, r, db, bq.DataSetPath, title)
 	} else {
-		s.queryTable(w, db, bq)
+		s.queryTable(w, db, bq, title)
 	}
 }
 
-func (s *Server) listFiles(w http.ResponseWriter) {
+func (s *Server) listFiles(w http.ResponseWriter, title string) {
 	entries, err := os.ReadDir(s.config.DataDir)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
 		return
 	}
-
-	// Root listing has no dataset path
-	title := ""
 
 	s.tableWriter.StartTableList(w, title)
 	for _, entry := range entries {
@@ -90,18 +88,13 @@ func (s *Server) listFiles(w http.ResponseWriter) {
 	s.tableWriter.EndTableList(w)
 }
 
-func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string) {
+func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string, title string) {
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-
-	// Ensure absolute path
-	if !strings.HasPrefix(dbUrlPath, "/") {
-		dbUrlPath = "/" + dbUrlPath
-	}
 
 	// Ensure absolute path
 	if !strings.HasPrefix(dbUrlPath, "/") {
@@ -126,7 +119,6 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		return
 	}
 
-	title := filepath.Base(dbUrlPath)
 	s.tableWriter.StartTableList(w, title)
 	for _, name := range tables {
 		// Link format: /dbfile.db/tablename
@@ -135,7 +127,7 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 	s.tableWriter.EndTableList(w)
 }
 
-func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet) {
+func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, title string) {
 	query := common.ConstructSQL(bq)
 	log.Printf("Executing query: %s", query)
 
@@ -152,7 +144,6 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		return
 	}
 
-	title := filepath.Base(bq.DataSetPath)
 	s.tableWriter.StartHTMLTable(w, columns, title)
 
 	values := make([]interface{}, len(columns))

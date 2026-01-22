@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Update title if it's the default SQLITER
     if (document.title === 'SQLITER') {
-        const urlPath = window.location.pathname;
+        const urlPath = window.location.pathname.replace(/^\/+/, '');
         const shortPath = urlPath.length > 80 ? '...' + urlPath.slice(-77) : urlPath;
         document.title = shortPath || 'SQLITER';
     }
