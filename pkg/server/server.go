@@ -82,14 +82,14 @@ func (s *Server) listFiles(w http.ResponseWriter, title string) {
 	s.tableWriter.StartTableList(w, title)
 	for _, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			s.tableWriter.WriteTableLink(w, entry.Name(), "/"+entry.Name())
+			s.tableWriter.WriteTableLink(w, entry.Name(), "/"+entry.Name(), "database")
 		}
 	}
 	s.tableWriter.EndTableList(w)
 }
 
 func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string, title string) {
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
 		return
@@ -101,18 +101,23 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		dbUrlPath = "/" + dbUrlPath
 	}
 
-	var tables []string
+	type TableInfo struct {
+		Name string
+		Type string
+	}
+
+	var tables []TableInfo
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var name, type_ string
+		if err := rows.Scan(&name, &type_); err != nil {
 			continue
 		}
-		tables = append(tables, name)
+		tables = append(tables, TableInfo{Name: name, Type: type_})
 	}
 
 	// Auto-redirect if enabled and only one table
 	if s.config.AutoRedirectSingleTable && len(tables) == 1 {
-		redirectUrl := dbUrlPath + "/" + tables[0]
+		redirectUrl := dbUrlPath + "/" + tables[0].Name
 		// Clean up double slashes just in case
 		redirectUrl = strings.ReplaceAll(redirectUrl, "//", "/")
 		http.Redirect(w, r, redirectUrl, http.StatusFound)
@@ -120,9 +125,9 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 	}
 
 	s.tableWriter.StartTableList(w, title)
-	for _, name := range tables {
+	for _, t := range tables {
 		// Link format: /dbfile.db/tablename
-		s.tableWriter.WriteTableLink(w, name, dbUrlPath+"/"+name)
+		s.tableWriter.WriteTableLink(w, t.Name, dbUrlPath+"/"+t.Name, t.Type)
 	}
 	s.tableWriter.EndTableList(w)
 }

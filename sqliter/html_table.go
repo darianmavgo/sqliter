@@ -73,6 +73,7 @@ type ListData struct {
 type ListItemData struct {
 	Name string
 	URL  string
+	Type string
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
@@ -118,19 +119,20 @@ func (tw *TableWriter) StartTableList(w io.Writer, title string) {
 }
 
 // WriteTableLink writes a link to a table.
-func (tw *TableWriter) WriteTableLink(w io.Writer, name, url string) error {
+func (tw *TableWriter) WriteTableLink(w io.Writer, name, url, kind string) error {
 	if tw.templates == nil {
-		return fmt_WriteTableLink(w, name, url)
+		return fmt_WriteTableLink(w, name, url, kind)
 	}
 
 	data := ListItemData{
 		Name: name,
 		URL:  url,
+		Type: kind,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "list_item.html", data); err != nil {
 		log.Printf("Error executing list_item.html: %v\n", err)
-		return fmt_WriteTableLink(w, name, url)
+		return fmt_WriteTableLink(w, name, url, kind)
 	}
 	flush(w)
 	return nil
@@ -216,10 +218,10 @@ func StartTableList(w io.Writer, title string) {
 	tw.StartTableList(w, title)
 }
 
-func WriteTableLink(w io.Writer, name, url string) error {
+func WriteTableLink(w io.Writer, name, url, kind string) error {
 	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	return tw.WriteTableLink(w, name, url)
+	return tw.WriteTableLink(w, name, url, kind)
 }
 
 func EndTableList(w io.Writer) {
