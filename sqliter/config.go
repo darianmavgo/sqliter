@@ -24,7 +24,7 @@ type Config struct {
 	AutoRedirectSingleTable bool `json:"auto_redirect_single_table"`
 
 	// StyleSheet is the URL path to the CSS stylesheet.
-	// Defaults to "/style1/stylesheet.css".
+	// Defaults to "/cssjs/default.css".
 	StyleSheet string `json:"stylesheet"`
 
 	// Verbose enables detailed logging for the server.
@@ -38,7 +38,7 @@ func DefaultConfig() *Config {
 		TemplateDir:             "templates",
 		StickyHeader:            true,
 		AutoRedirectSingleTable: true,
-		StyleSheet:              "/style1/stylesheet.css",
+		StyleSheet:              "/cssjs/default.css",
 		Verbose:                 false,
 	}
 }
@@ -64,7 +64,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.TemplateDir = "templates"
 	}
 	if cfg.StyleSheet == "" {
-		cfg.StyleSheet = "/style1/stylesheet.css"
+		cfg.StyleSheet = "/cssjs/default.css"
 	}
 
 	return cfg, nil

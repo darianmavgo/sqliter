@@ -12,5 +12,5 @@ if [ ! -f "themes/$THEME.css" ]; then
     exit 1
 fi
 
-cat "themes/$THEME.css" "themes/overrides.css" > "themes/style1/stylesheet.css"
+cat "themes/$THEME.css" "themes/overrides.css" > "themes/cssjs/default.css"
 echo "Swapped to theme: $THEME"
