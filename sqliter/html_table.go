@@ -17,8 +17,19 @@ var (
 
 func initTemplates() {
 	once.Do(func() {
+		// Try to load from "templates" directory first
 		defaultTemplates = LoadTemplates("templates")
+		// If fails, use embedded templates
+		if defaultTemplates == nil {
+			defaultTemplates = loadEmbeddedTemplates()
+		}
 	})
+}
+
+// GetDefaultTemplates returns the default (possibly embedded) templates.
+func GetDefaultTemplates() *template.Template {
+	initTemplates()
+	return defaultTemplates
 }
 
 // LoadTemplates loads templates from the specified directory.
