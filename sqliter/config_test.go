@@ -2,6 +2,7 @@ package sqliter
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -16,21 +17,20 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	content := `{"data_dir": "test_data", "template_dir": "test_templates"}`
-	tmpfile, err := os.CreateTemp("", "config.json")
+	content := `data_dir = "test_data"
+template_dir = "test_templates"`
+	tmpdir, err := os.MkdirTemp("", "config_test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer os.RemoveAll(tmpdir)
 
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
+	tmpfile := filepath.Join(tmpdir, "config.hcl")
+	if err := os.WriteFile(tmpfile, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -44,21 +44,19 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestLoadConfigDefaults(t *testing.T) {
-	content := `{}`
-	tmpfile, err := os.CreateTemp("", "config_empty.json")
+	content := ``
+	tmpdir, err := os.MkdirTemp("", "config_empty_test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer os.RemoveAll(tmpdir)
 
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
+	tmpfile := filepath.Join(tmpdir, "config.hcl")
+	if err := os.WriteFile(tmpfile, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}

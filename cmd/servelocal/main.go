@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	cfg := sqliter.DefaultConfig()
+	cfg, err := sqliter.LoadConfig("config.hcl")
+	if err != nil {
+		log.Fatal(err)
+	}
 	srv := server.NewServer(cfg)
 
 	// Serve static files for the theme
@@ -18,6 +21,6 @@ func main() {
 	http.Handle("/cssjs/", http.StripPrefix("/cssjs/", http.FileServer(http.Dir("cssjs"))))
 
 	http.Handle("/", srv)
-	log.Println("Serving local sqlite files from sample_data at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Printf("Serving local sqlite files from %s at http://localhost:%s\n", cfg.DataDir, cfg.Port)
+	log.Fatal(http.ListenAndServe(":"+cfg.Port, nil))
 }

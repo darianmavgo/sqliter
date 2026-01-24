@@ -69,7 +69,7 @@ logs/
 *.zip
 *.json
 *.secret
-config.json
+config.hcl
 wc2022_gae_default.secret
 ./flight
 tmp/
