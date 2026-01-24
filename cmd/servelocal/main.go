@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/darianmavgo/sqliter/pkg/server"
+	"github.com/darianmavgo/sqliter/server"
 	"github.com/darianmavgo/sqliter/sqliter"
 )
 

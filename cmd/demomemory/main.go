@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/darianmavgo/banquet"
-	"github.com/darianmavgo/sqliter/pkg/common"
+	"github.com/darianmavgo/sqliter/common"
 	view "github.com/darianmavgo/sqliter/sqliter"
 	_ "github.com/mattn/go-sqlite3"
 )

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/darianmavgo/banquet"
-	"github.com/darianmavgo/sqliter/pkg/common"
+	"github.com/darianmavgo/sqliter/common"
 	"github.com/darianmavgo/sqliter/sqliter"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -132,9 +132,15 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 	s.tableWriter.EndTableList(w)
 }
 
+func (s *Server) log(format string, args ...interface{}) {
+	if s.config.Verbose {
+		log.Printf(format, args...)
+	}
+}
+
 func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, title string) {
 	query := common.ConstructSQL(bq)
-	log.Printf("Executing query: %s", query)
+	s.log("Executing query: %s", query)
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -159,7 +165,7 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Println("Error scanning row:", err)
+			s.log("Error scanning row: %v", err)
 			continue
 		}
 
