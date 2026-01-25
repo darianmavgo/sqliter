@@ -15,11 +15,8 @@ var (
 	once             sync.Once
 )
 
-//go:embed templates/*.html
-var embeddedTemplates embed.FS
-
-//go:embed cssjs/*
-var embeddedAssets embed.FS
+//go:embed templates/*
+var embeddedFS embed.FS
 
 func initTemplates() {
 	once.Do(func() {
@@ -44,14 +41,12 @@ func GetEmbeddedTemplates() (*template.Template, error) {
 		},
 	}
 	// Parse templates from the embedded filesystem
-	// The pattern "templates/*.html" matches files in the "templates" directory
-	// preserved in the embedded filesystem.
-	return template.New("base").Funcs(funcMap).ParseFS(embeddedTemplates, "templates/*.html")
+	return template.New("base").Funcs(funcMap).ParseFS(embeddedFS, "templates/*.html")
 }
 
 // GetEmbeddedAssets returns the embedded assets filesystem.
 func GetEmbeddedAssets() embed.FS {
-	return embeddedAssets
+	return embeddedFS
 }
 
 // GetDefaultTemplates returns the default (possibly embedded) templates.
@@ -82,10 +77,12 @@ func (tw *TableWriter) EnableEditable(editable bool) {
 }
 
 // HeadData is the data passed to the head.html template.
+// HeadData is the data passed to the head.html template.
 type HeadData struct {
 	Headers      []string
 	StickyHeader bool
-	StyleSheet   string
+	StyleSheet   string // Kept for backward compat or external refs
+	CSS          template.CSS
 	Title        string
 	Editable     bool
 }
@@ -110,10 +107,20 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 		}
 	}
 
+	// Read embedded CSS
+	var cssContent template.CSS
+	cssData, err := embeddedFS.ReadFile("templates/default.css")
+	if err == nil {
+		cssContent = template.CSS(cssData)
+	} else {
+		log.Printf("Error reading default.css: %v", err)
+	}
+
 	data := HeadData{
 		Headers:      headers,
 		StickyHeader: tw.config.StickyHeader,
 		StyleSheet:   tw.config.StyleSheet,
+		CSS:          cssContent,
 		Title:        title,
 		Editable:     tw.editable,
 	}
@@ -157,7 +164,22 @@ func (tw *TableWriter) EndHTMLTable(w io.Writer) {
 		return
 	}
 
-	if err := tw.templates.ExecuteTemplate(w, "foot.html", nil); err != nil {
+	// Read embedded JS
+	var jsContent template.JS
+	jsData, err := embeddedFS.ReadFile("templates/default.js")
+	if err == nil {
+		jsContent = template.JS(jsData)
+	} else {
+		log.Printf("Error reading default.js: %v", err)
+	}
+
+	data := struct {
+		JS template.JS
+	}{
+		JS: jsContent,
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "foot.html", data); err != nil {
 		log.Printf("Error executing foot.html: %v\n", err)
 		fmt_EndHTMLTable(w)
 		return

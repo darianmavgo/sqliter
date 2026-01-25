@@ -81,11 +81,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(r.URL.Path, "/cssjs/") {
-		http.FileServer(http.FS(sqliter.GetEmbeddedAssets())).ServeHTTP(w, r)
-		return
-	}
-
 	s.queryTable(w, db, bq, title)
 }
 

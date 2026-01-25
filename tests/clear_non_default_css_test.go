@@ -37,7 +37,7 @@ func TestOnlyDefaultCSS(t *testing.T) {
 		// 1. Check for CSS files
 		if !info.IsDir() && strings.HasSuffix(path, ".css") {
 			relPath, _ := filepath.Rel(root, path)
-			if relPath != "sqliter/cssjs/default.css" {
+			if relPath != "sqliter/templates/default.css" {
 				fmt.Printf("FOUND NON-DEFAULT CSS FILE: %s\n", relPath)
 				foundNonDefault = true
 			} else {
@@ -47,8 +47,8 @@ func TestOnlyDefaultCSS(t *testing.T) {
 
 		// 2. Check for <style> tags in HTML, Go, and Template files
 		if !info.IsDir() && (strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".tmpl")) {
-			// Skip the test file itself
-			if strings.HasSuffix(path, "clear_non_default_css_test.go") {
+			// Skip the test file itself and head.html which now has inline CSS
+			if strings.HasSuffix(path, "clear_non_default_css_test.go") || strings.HasSuffix(path, "head.html") {
 				return nil
 			}
 			match, err := fileContainsStyleTag(path)

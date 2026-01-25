@@ -19,6 +19,11 @@ func TestStartHTMLTable(t *testing.T) {
 	if !strings.Contains(output, "<table") {
 		t.Errorf("Expected output to contain <table> tag, got %s", output)
 	}
+
+	// Check if embedded CSS was injected
+	if !strings.Contains(output, "background-color: #121212;") {
+		t.Errorf("Expected output to contain inlined CSS. Got:\n%s", output)
+	}
 }
 
 func TestWriteHTMLRow(t *testing.T) {
