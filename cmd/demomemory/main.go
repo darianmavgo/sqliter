@@ -2,13 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/sqliter/common"
-	view "github.com/darianmavgo/sqliter/sqliter"
+	"github.com/darianmavgo/sqliter/sqliter"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -69,6 +70,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If it's a POST request, handle CRUD
+	if r.Method == http.MethodPost {
+		handleCRUD(w, r, bq)
+		return
+	}
+
 	// Query the table
 	queryTable(w, bq)
 }
@@ -101,13 +108,13 @@ func listTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view.StartTableList(w, "")
-	for _, t := range tables {
-		// Link to the table.
-		// If we are at root, link is /name
-		view.WriteTableLink(w, t.Name, "/"+t.Name, t.Type)
+	sqliter.StartHTMLTable(w, []string{"Table", "Type"}, "Database")
+	for i, t := range tables {
+		// Link format: /tablename
+		link := fmt.Sprintf("<a href='/%s'>%s</a>", t.Name, t.Name)
+		sqliter.WriteHTMLRow(w, i, []string{link, t.Type})
 	}
-	view.EndTableList(w)
+	sqliter.EndHTMLTable(w)
 }
 
 func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
@@ -133,7 +140,9 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 	w.Header().Set("X-Banquet", common.GetBanquetJSON(bq))
 	w.Header().Set("X-Query", query)
 
-	view.StartHTMLTable(w, columns, bq.Table)
+	tw := sqliter.NewTableWriter(sqliter.GetDefaultTemplates(), sqliter.DefaultConfig())
+	tw.EnableEditable(true)
+	tw.StartHTMLTable(w, columns, bq.Table)
 
 	// Prepare a slice of interface{} to hold values
 	values := make([]interface{}, len(columns))
@@ -142,6 +151,7 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 		valuePtrs[i] = &values[i]
 	}
 
+	var rowIdx int
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
 			log.Println("Error scanning row:", err)
@@ -158,8 +168,47 @@ func queryTable(w http.ResponseWriter, bq *banquet.Banquet) {
 			}
 		}
 
-		view.WriteHTMLRow(w, strValues)
+		tw.WriteHTMLRow(w, rowIdx, strValues)
+		rowIdx++
 	}
 
-	view.EndHTMLTable(w)
+	tw.EndHTMLTable(w)
+}
+
+func handleCRUD(w http.ResponseWriter, r *http.Request, bq *banquet.Banquet) {
+	var payload struct {
+		Action string                 `json:"action"`
+		Data   map[string]interface{} `json:"data"`
+		Where  map[string]interface{} `json:"where"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var query string
+	var args []interface{}
+
+	switch payload.Action {
+	case "create":
+		query, args = common.ConstructInsert(bq.Table, payload.Data)
+	case "update":
+		query, args = common.ConstructUpdate(bq.Table, payload.Data, payload.Where)
+	case "delete":
+		query, args = common.ConstructDelete(bq.Table, payload.Where)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Executing CRUD %s on %s: %s", payload.Action, bq.Table, query)
+
+	if _, err := db.Exec(query, args...); err != nil {
+		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

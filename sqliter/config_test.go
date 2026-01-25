@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/darianmavgo/sqliter/internal/testutil"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -19,11 +21,8 @@ func TestDefaultConfig(t *testing.T) {
 func TestLoadConfig(t *testing.T) {
 	content := `data_dir = "test_data"
 template_dir = "test_templates"`
-	tmpdir, err := os.MkdirTemp("", "config_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpdir)
+	tmpdir := testutil.GetTestOutputDir(t, "config_test")
+	// defer os.RemoveAll(tmpdir)
 
 	tmpfile := filepath.Join(tmpdir, "config.hcl")
 	if err := os.WriteFile(tmpfile, []byte(content), 0644); err != nil {
@@ -45,11 +44,8 @@ template_dir = "test_templates"`
 
 func TestLoadConfigDefaults(t *testing.T) {
 	content := ``
-	tmpdir, err := os.MkdirTemp("", "config_empty_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpdir)
+	tmpdir := testutil.GetTestOutputDir(t, "config_empty_test")
+	// defer os.RemoveAll(tmpdir)
 
 	tmpfile := filepath.Join(tmpdir, "config.hcl")
 	if err := os.WriteFile(tmpfile, []byte(content), 0644); err != nil {

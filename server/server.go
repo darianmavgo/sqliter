@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -67,9 +68,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
 		s.listTables(w, r, db, bq.DataSetPath, title)
-	} else {
-		s.queryTable(w, db, bq, title)
+		return
 	}
+
+	if r.Method == http.MethodPost {
+		if !s.config.RowCRUD {
+			http.Error(w, "Row CRUD is disabled", http.StatusForbidden)
+			return
+		}
+		s.handleCRUD(w, r, db, bq)
+		return
+	}
+
+	s.queryTable(w, db, bq, title)
 }
 
 func (s *Server) listFiles(w http.ResponseWriter, title string) {
@@ -79,13 +90,14 @@ func (s *Server) listFiles(w http.ResponseWriter, title string) {
 		return
 	}
 
-	s.tableWriter.StartTableList(w, title)
-	for _, entry := range entries {
+	s.tableWriter.StartHTMLTable(w, []string{"Database"}, title)
+	for i, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			s.tableWriter.WriteTableLink(w, entry.Name(), "/"+entry.Name(), "database")
+			link := fmt.Sprintf("<a href='/%s'>%s</a>", entry.Name(), entry.Name())
+			s.tableWriter.WriteHTMLRow(w, i, []string{link})
 		}
 	}
-	s.tableWriter.EndTableList(w)
+	s.tableWriter.EndHTMLTable(w)
 }
 
 func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string, title string) {
@@ -124,12 +136,13 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		return
 	}
 
-	s.tableWriter.StartTableList(w, title)
-	for _, t := range tables {
+	s.tableWriter.StartHTMLTable(w, []string{"Table", "Type"}, title)
+	for i, t := range tables {
 		// Link format: /dbfile.db/tablename
-		s.tableWriter.WriteTableLink(w, t.Name, dbUrlPath+"/"+t.Name, t.Type)
+		link := fmt.Sprintf("<a href='%s/%s'>%s</a>", dbUrlPath, t.Name, t.Name)
+		s.tableWriter.WriteHTMLRow(w, i, []string{link, t.Type})
 	}
-	s.tableWriter.EndTableList(w)
+	s.tableWriter.EndHTMLTable(w)
 }
 
 func (s *Server) log(format string, args ...interface{}) {
@@ -139,6 +152,9 @@ func (s *Server) log(format string, args ...interface{}) {
 }
 
 func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, title string) {
+	if s.config.RowCRUD {
+		s.tableWriter.EnableEditable(true)
+	}
 	query := common.ConstructSQL(bq)
 	s.log("Executing query: %s", query)
 
@@ -163,6 +179,7 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		valuePtrs[i] = &values[i]
 	}
 
+	var i int
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
 			s.log("Error scanning row: %v", err)
@@ -178,8 +195,68 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 			}
 		}
 
-		s.tableWriter.WriteHTMLRow(w, strValues)
+		s.tableWriter.WriteHTMLRow(w, i, strValues)
+		i++
 	}
 
 	s.tableWriter.EndHTMLTable(w)
+}
+
+func (s *Server) handleCRUD(w http.ResponseWriter, r *http.Request, db *sql.DB, bq *banquet.Banquet) {
+	var payload struct {
+		Action string                 `json:"action"`
+		Data   map[string]interface{} `json:"data"`
+		Where  map[string]interface{} `json:"where"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.logError("Error decoding JSON: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var query string
+	var args []interface{}
+
+	switch payload.Action {
+	case "create":
+		query, args = common.ConstructInsert(bq.Table, payload.Data)
+	case "update":
+		query, args = common.ConstructUpdate(bq.Table, payload.Data, payload.Where)
+	case "delete":
+		query, args = common.ConstructDelete(bq.Table, payload.Where)
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	s.log("Executing CRUD %s: %s", payload.Action, query)
+
+	if _, err := db.Exec(query, args...); err != nil {
+		s.logError("Error executing CRUD: %v", err)
+		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (s *Server) logError(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Printf("[ERROR] %s", msg)
+
+	// Try to log to a file
+	logDir := s.config.LogDir
+	if logDir == "" {
+		logDir = "logs"
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(logDir, "server_error.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		defer f.Close()
+		log.New(f, "", log.LstdFlags).Println(msg)
+	}
 }

@@ -24,7 +24,7 @@ func TestStartHTMLTable(t *testing.T) {
 func TestWriteHTMLRow(t *testing.T) {
 	var buf bytes.Buffer
 	cells := []string{"Alice", "30"}
-	WriteHTMLRow(&buf, cells)
+	WriteHTMLRow(&buf, 0, cells)
 
 	output := buf.String()
 	if !strings.Contains(output, "Alice") || !strings.Contains(output, "30") {
@@ -42,15 +42,5 @@ func TestEndHTMLTable(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "</table>") {
 		t.Errorf("Expected output to contain </table> tag, got %s", output)
-	}
-}
-
-func TestStartTableList(t *testing.T) {
-	var buf bytes.Buffer
-	StartTableList(&buf, "Test List")
-
-	output := buf.String()
-	if !strings.Contains(output, "<html") {
-		t.Errorf("Expected output to contain <html> tag, got %s", output)
 	}
 }

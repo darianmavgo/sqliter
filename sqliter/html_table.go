@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 )
@@ -19,10 +20,6 @@ func initTemplates() {
 	once.Do(func() {
 		// Try to load from "templates" directory first
 		defaultTemplates = LoadTemplates("templates")
-		// If fails, use embedded templates
-		if defaultTemplates == nil {
-			defaultTemplates = loadEmbeddedTemplates()
-		}
 	})
 }
 
@@ -33,6 +30,7 @@ func GetDefaultTemplates() *template.Template {
 }
 
 // LoadTemplates loads templates from the specified directory.
+// If the directory isn't found, it tries walking up the tree to find it.
 func LoadTemplates(dir string) *template.Template {
 	// Define template functions
 	funcMap := template.FuncMap{
@@ -40,11 +38,28 @@ func LoadTemplates(dir string) *template.Template {
 			a, _ := json.Marshal(v)
 			return template.JS(a)
 		},
+		"safe": func(s string) template.HTML {
+			return template.HTML(s)
+		},
 	}
 
-	absDir, _ := filepath.Abs(dir)
+	searchDir := dir
+	// If path doesn't exist, try walking up to find a directory with that name
+	if _, err := os.Stat(searchDir); os.IsNotExist(err) {
+		current := "."
+		for i := 0; i < 5; i++ {
+			candidate := filepath.Join(current, dir)
+			if _, err := os.Stat(candidate); err == nil {
+				searchDir = candidate
+				break
+			}
+			current = filepath.Join("..", current)
+		}
+	}
+
+	absDir, _ := filepath.Abs(searchDir)
 	// Parse templates with functions
-	t, err := template.New("base").Funcs(funcMap).ParseGlob(filepath.Join(dir, "*.html"))
+	t, err := template.New("base").Funcs(funcMap).ParseGlob(filepath.Join(searchDir, "*.html"))
 	if err != nil {
 		log.Printf("Error loading templates from %s (%s): %v. Falling back to simple output.\n", dir, absDir, err)
 		return nil
@@ -56,6 +71,7 @@ func LoadTemplates(dir string) *template.Template {
 type TableWriter struct {
 	templates *template.Template
 	config    *Config
+	editable  bool
 }
 
 // NewTableWriter creates a new TableWriter with the given templates.
@@ -67,25 +83,18 @@ func NewTableWriter(t *template.Template, cfg *Config) *TableWriter {
 	return &TableWriter{templates: t, config: cfg}
 }
 
+// EnableEditable sets the editable flag for the table.
+func (tw *TableWriter) EnableEditable(editable bool) {
+	tw.editable = editable
+}
+
 // HeadData is the data passed to the head.html template.
 type HeadData struct {
 	Headers      []string
 	StickyHeader bool
 	StyleSheet   string
 	Title        string
-}
-
-// ListData is the data passed to the list_head.html template.
-type ListData struct {
-	StyleSheet string
-	Title      string
-}
-
-// ListItemData is the data passed to the list_item.html template.
-type ListItemData struct {
-	Name string
-	URL  string
-	Type string
+	Editable     bool
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
@@ -101,11 +110,19 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 		return
 	}
 
+	// Signal to the client that this table is editable via header if writing to HTTP
+	if tw.editable {
+		if rw, ok := w.(http.ResponseWriter); ok {
+			rw.Header().Set("X-SQLiter-Editable", "true")
+		}
+	}
+
 	data := HeadData{
 		Headers:      headers,
 		StickyHeader: tw.config.StickyHeader,
 		StyleSheet:   tw.config.StyleSheet,
 		Title:        title,
+		Editable:     tw.editable,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "head.html", data); err != nil {
@@ -116,74 +133,24 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 	flush(w)
 }
 
-// StartTableList writes the initial HTML for a list of tables.
-func (tw *TableWriter) StartTableList(w io.Writer, title string) {
-	if tw.config.Verbose {
-		log.Printf("[SQLITER] Starting table list: %s", title)
-	}
-	if tw.templates == nil {
-		fmt_StartTableList(w)
-		return
-	}
-
-	data := ListData{
-		StyleSheet: tw.config.StyleSheet,
-		Title:      title,
-	}
-
-	if err := tw.templates.ExecuteTemplate(w, "list_head.html", data); err != nil {
-		log.Printf("Error executing list_head.html: %v\n", err)
-		fmt_StartTableList(w)
-		return
-	}
-	flush(w)
-}
-
-// WriteTableLink writes a link to a table.
-func (tw *TableWriter) WriteTableLink(w io.Writer, name, url, kind string) error {
-	if tw.templates == nil {
-		return fmt_WriteTableLink(w, name, url, kind)
-	}
-
-	data := ListItemData{
-		Name: name,
-		URL:  url,
-		Type: kind,
-	}
-
-	if err := tw.templates.ExecuteTemplate(w, "list_item.html", data); err != nil {
-		log.Printf("Error executing list_item.html: %v\n", err)
-		return fmt_WriteTableLink(w, name, url, kind)
-	}
-	flush(w)
-	return nil
-}
-
-// EndTableList closes the list view.
-func (tw *TableWriter) EndTableList(w io.Writer) {
-	if tw.templates == nil {
-		fmt_EndTableList(w)
-		return
-	}
-
-	if err := tw.templates.ExecuteTemplate(w, "list_foot.html", nil); err != nil {
-		log.Printf("Error executing list_foot.html: %v\n", err)
-		fmt_EndTableList(w)
-		return
-	}
-	flush(w)
-}
-
 // WriteHTMLRow writes a single row to the HTML table.
-func (tw *TableWriter) WriteHTMLRow(w io.Writer, cells []string) error {
+func (tw *TableWriter) WriteHTMLRow(w io.Writer, index int, cells []string) error {
 	if tw.templates == nil {
-		fmt_WriteHTMLRow(w, cells)
+		fmt_WriteHTMLRow(w, index, cells)
 		return nil
 	}
 
-	if err := tw.templates.ExecuteTemplate(w, "row.html", cells); err != nil {
+	data := struct {
+		Index int
+		Cells []string
+	}{
+		Index: index,
+		Cells: cells,
+	}
+
+	if err := tw.templates.ExecuteTemplate(w, "row.html", data); err != nil {
 		log.Printf("Error executing row.html: %v\n", err)
-		fmt_WriteHTMLRow(w, cells)
+		fmt_WriteHTMLRow(w, index, cells)
 		return err
 	}
 	flush(w)
@@ -210,45 +177,22 @@ func (tw *TableWriter) EndHTMLTable(w io.Writer) {
 // StartHTMLTable writes the initial HTML using default templates.
 func StartHTMLTable(w io.Writer, headers []string, title string) {
 	initTemplates()
-	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
 	tw.StartHTMLTable(w, headers, title)
 }
 
 // WriteHTMLRow writes a single row using default templates.
-func WriteHTMLRow(w io.Writer, cells []string) error {
-	initTemplates()
+func WriteHTMLRow(w io.Writer, index int, cells []string) error {
 	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	return tw.WriteHTMLRow(w, cells)
+	return tw.WriteHTMLRow(w, index, cells)
 }
 
 // EndHTMLTable closes the table using default templates.
 func EndHTMLTable(w io.Writer) {
 	initTemplates()
-	initTemplates()
 	tw := NewTableWriter(defaultTemplates, DefaultConfig())
 	tw.EndHTMLTable(w)
-}
-
-// --- List View Implementation (Wrapped) ---
-
-func StartTableList(w io.Writer, title string) {
-	initTemplates()
-	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	tw.StartTableList(w, title)
-}
-
-func WriteTableLink(w io.Writer, name, url, kind string) error {
-	initTemplates()
-	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	return tw.WriteTableLink(w, name, url, kind)
-}
-
-func EndTableList(w io.Writer) {
-	initTemplates()
-	tw := NewTableWriter(defaultTemplates, DefaultConfig())
-	tw.EndTableList(w)
 }
 
 func flush(w io.Writer) {

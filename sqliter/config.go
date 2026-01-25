@@ -47,6 +47,14 @@ type Config struct {
 
 	// AutoSelectTb0 enables automatic selection of the first table if none is specified.
 	AutoSelectTb0 bool `hcl:"auto_select_tb0,optional"`
+
+	// RowCRUD enables row-level Create, Read, Update, Delete operations.
+	// Defaults to false.
+	RowCRUD bool `hcl:"row_crud,optional"`
+
+	// LogDir is the directory where logs will be stored.
+	// Defaults to "logs".
+	LogDir string `hcl:"log_dir,optional"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -63,6 +71,8 @@ func DefaultConfig() *Config {
 		SecretKey:               ".secret.key",
 		Verbose:                 false,
 		AutoSelectTb0:           true,
+		RowCRUD:                 false,
+		LogDir:                  "logs",
 	}
 }
 

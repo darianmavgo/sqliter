@@ -16,8 +16,12 @@ func fmt_StartHTMLTable(w io.Writer, headers []string) {
 	flush(w)
 }
 
-func fmt_WriteHTMLRow(w io.Writer, cells []string) {
+func fmt_WriteHTMLRow(w io.Writer, index int, cells []string) {
 	io.WriteString(w, "<tr>")
+	// Fallback doesn't necessarily need the index column since it's "simple",
+	// but to match the structure we should probably add it or ignore it.
+	// Let's add it for consistency.
+	io.WriteString(w, "<td>"+fmt.Sprint(index)+"</td>")
 	for _, c := range cells {
 		io.WriteString(w, "<td>"+c+"</td>")
 	}
@@ -27,25 +31,5 @@ func fmt_WriteHTMLRow(w io.Writer, cells []string) {
 
 func fmt_EndHTMLTable(w io.Writer) {
 	io.WriteString(w, "</tbody></table></body></html>")
-	flush(w)
-}
-
-func fmt_StartTableList(w io.Writer) {
-	io.WriteString(w, "<!DOCTYPE html><html><head><title>Tables</title></head><body><ul>")
-	flush(w)
-}
-
-func fmt_WriteTableLink(w io.Writer, name, url, kind string) error {
-	var err error
-	if kind != "" {
-		_, err = fmt.Fprintf(w, "<li><a href='%s'>%s</a> (%s)</li>", url, name, kind)
-	} else {
-		_, err = fmt.Fprintf(w, "<li><a href='%s'>%s</a></li>", url, name)
-	}
-	return err
-}
-
-func fmt_EndTableList(w io.Writer) {
-	io.WriteString(w, "</ul></body></html>")
 	flush(w)
 }
