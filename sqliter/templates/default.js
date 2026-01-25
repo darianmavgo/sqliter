@@ -96,11 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add context menu for deletion
         table.querySelectorAll('tbody tr').forEach(tr => {
             tr.addEventListener('contextmenu', function (e) {
-                e.preventDefault();
-                // Only allow delete in edit mode? Or always?
-                // User requirement implies "Edit Mode" toggles editability.
-                // Let's restrict delete to Edit Mode for safety/consistency.
+                // Only intercept in edit mode
                 if (document.body.classList.contains('edit-mode')) {
+                    e.preventDefault();
                     if (confirm('Delete this row?')) {
                         handleDelete(this);
                     }
@@ -175,6 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 console.error("Update failed", err);
+                // Alert the user to the failure reason
+                alert("Update Failed: " + err.message);
                 td.innerText = td.dataset.original; // Revert
                 td.classList.add('updated-error');
                 setTimeout(() => td.classList.remove('updated-error'), 1000);
@@ -187,7 +187,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(() => {
                 tr.remove();
             })
-            .catch(err => console.error("Delete failed", err));
+            .catch(err => {
+                console.error("Delete failed", err);
+                alert("Delete Failed: " + err.message);
+            });
     }
 
     function handleCreate() {
@@ -196,13 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText);
         const data = {};
 
-        // Use empty string for all columns initially (or prompt user?)
-        // User said "No extra forms... table becomes the form". 
-        // So we insert a blank row and let them edit it? 
-        // But we need to INSERT it into DB. 
-        // SQLite will fail on NOT NULL constraints if we insert empty.
-        // A better UX might be: Insert a row in UI, user fills it, then "Save" or auto-save on fill?
-        // Let's try: Insert row with default values (empty strings), try to save. If fail, alert.
+        // Use empty string for all columns initially
         headers.forEach(h => data[h] = "");
 
         sendCRUD('create', { data })
@@ -211,10 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 console.error("Create failed", err);
-                // No alert, just log
+                alert("Create Row Failed: " + err.message);
             });
-
-        // Alternative: Just reload which might not show anything if create failed.
     }
 
     function sendCRUD(action, payload) {
