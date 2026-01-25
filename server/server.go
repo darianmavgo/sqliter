@@ -24,7 +24,8 @@ type Server struct {
 
 // NewServer creates a new Server with the given configuration.
 func NewServer(cfg *sqliter.Config) *Server {
-	t := sqliter.LoadTemplates(cfg.TemplateDir)
+	// Templates are now embedded and do not use the filesystem path from config
+	t := sqliter.GetDefaultTemplates()
 	return &Server{
 		config:      cfg,
 		tableWriter: sqliter.NewTableWriter(t, cfg),
@@ -77,6 +78,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleCRUD(w, r, db, bq)
+		return
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/cssjs/") {
+		http.FileServer(http.FS(sqliter.GetEmbeddedAssets())).ServeHTTP(w, r)
 		return
 	}
 

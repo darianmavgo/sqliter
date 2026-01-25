@@ -1,13 +1,12 @@
 package sqliter
 
 import (
+	"embed"
 	"encoding/json"
 	"html/template"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -16,22 +15,24 @@ var (
 	once             sync.Once
 )
 
+//go:embed templates/*.html
+var embeddedTemplates embed.FS
+
+//go:embed cssjs/*
+var embeddedAssets embed.FS
+
 func initTemplates() {
 	once.Do(func() {
-		// Try to load from "templates" directory first
-		defaultTemplates = LoadTemplates("templates")
+		var err error
+		defaultTemplates, err = GetEmbeddedTemplates()
+		if err != nil {
+			log.Printf("Error loading embedded templates: %v\n", err)
+		}
 	})
 }
 
-// GetDefaultTemplates returns the default (possibly embedded) templates.
-func GetDefaultTemplates() *template.Template {
-	initTemplates()
-	return defaultTemplates
-}
-
-// LoadTemplates loads templates from the specified directory.
-// If the directory isn't found, it tries walking up the tree to find it.
-func LoadTemplates(dir string) *template.Template {
+// GetEmbeddedTemplates returns the embedded templates.
+func GetEmbeddedTemplates() (*template.Template, error) {
 	// Define template functions
 	funcMap := template.FuncMap{
 		"json": func(v interface{}) template.JS {
@@ -42,29 +43,21 @@ func LoadTemplates(dir string) *template.Template {
 			return template.HTML(s)
 		},
 	}
+	// Parse templates from the embedded filesystem
+	// The pattern "templates/*.html" matches files in the "templates" directory
+	// preserved in the embedded filesystem.
+	return template.New("base").Funcs(funcMap).ParseFS(embeddedTemplates, "templates/*.html")
+}
 
-	searchDir := dir
-	// If path doesn't exist, try walking up to find a directory with that name
-	if _, err := os.Stat(searchDir); os.IsNotExist(err) {
-		current := "."
-		for i := 0; i < 5; i++ {
-			candidate := filepath.Join(current, dir)
-			if _, err := os.Stat(candidate); err == nil {
-				searchDir = candidate
-				break
-			}
-			current = filepath.Join("..", current)
-		}
-	}
+// GetEmbeddedAssets returns the embedded assets filesystem.
+func GetEmbeddedAssets() embed.FS {
+	return embeddedAssets
+}
 
-	absDir, _ := filepath.Abs(searchDir)
-	// Parse templates with functions
-	t, err := template.New("base").Funcs(funcMap).ParseGlob(filepath.Join(searchDir, "*.html"))
-	if err != nil {
-		log.Printf("Error loading templates from %s (%s): %v. Falling back to simple output.\n", dir, absDir, err)
-		return nil
-	}
-	return t
+// GetDefaultTemplates returns the default (possibly embedded) templates.
+func GetDefaultTemplates() *template.Template {
+	initTemplates()
+	return defaultTemplates
 }
 
 // TableWriter handles writing HTML tables with configurable templates.

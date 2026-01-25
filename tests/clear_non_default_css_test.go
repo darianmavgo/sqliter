@@ -37,7 +37,7 @@ func TestOnlyDefaultCSS(t *testing.T) {
 		// 1. Check for CSS files
 		if !info.IsDir() && strings.HasSuffix(path, ".css") {
 			relPath, _ := filepath.Rel(root, path)
-			if relPath != "cssjs/default.css" {
+			if relPath != "sqliter/cssjs/default.css" {
 				fmt.Printf("FOUND NON-DEFAULT CSS FILE: %s\n", relPath)
 				foundNonDefault = true
 			} else {

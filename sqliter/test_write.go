@@ -1,3 +1,0 @@
-package sqliter
-
-// test file
