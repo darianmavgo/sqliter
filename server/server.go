@@ -13,7 +13,7 @@ import (
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/sqliter/common"
 	"github.com/darianmavgo/sqliter/sqliter"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type Server struct {
@@ -59,7 +59,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error opening DB: %v", err), http.StatusInternalServerError)
 		return

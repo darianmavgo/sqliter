@@ -15,7 +15,7 @@ import (
 	"github.com/darianmavgo/sqliter/internal/testutil"
 	"github.com/darianmavgo/sqliter/server"
 	"github.com/darianmavgo/sqliter/sqliter"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func TestBrowserLinksFlow(t *testing.T) {
@@ -27,7 +27,7 @@ func TestBrowserLinksFlow(t *testing.T) {
 	dbName := "test_links.db"
 	dbPath := filepath.Join(tempDir, dbName)
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open DB: %v", err)
 	}

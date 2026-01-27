@@ -95,10 +95,17 @@ type HeadData struct {
 	CSS          template.CSS
 	Title        string
 	Editable     bool
+	BanquetDebug string // One-liner debug info about parsed Banquet
+	SQLQuery     string // The SQL query executed
 }
 
 // StartHTMLTable writes the initial HTML for a page with a table style and the table header.
 func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title string) {
+	tw.StartHTMLTableWithDebug(w, headers, title, "", "")
+}
+
+// StartHTMLTableWithDebug writes the initial HTML with debug information about the Banquet and SQL query.
+func (tw *TableWriter) StartHTMLTableWithDebug(w io.Writer, headers []string, title string, banquetDebug string, sqlQuery string) {
 	if tw.config.Verbose {
 		log.Printf("[SQLITER] Starting HTML table: %s with %d headers", title, len(headers))
 	}
@@ -133,6 +140,8 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 		CSS:          cssContent,
 		Title:        title,
 		Editable:     tw.editable,
+		BanquetDebug: banquetDebug,
+		SQLQuery:     sqlQuery,
 	}
 
 	if err := tw.templates.ExecuteTemplate(w, "head.html", data); err != nil {

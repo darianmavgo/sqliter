@@ -17,6 +17,16 @@
 </head>
 
 <body>
+  {{if .BanquetDebug}}
+  <div style="background: #1a1a1a; color: #888; padding: 8px 12px; font-family: monospace; font-size: 11px; border-bottom: 1px solid #333;">
+    <div style="margin-bottom: 2px;">📊 {{.BanquetDebug}}</div>
+    <div>🔍 {{.SQLQuery}}</div>
+  </div>
+  <script>
+    console.log('📊 Banquet:', {{.BanquetDebug}});
+    console.log('🔍 SQL Query:', {{.SQLQuery}});
+  </script>
+  {{end}}
 
   <table id="table">
     <thead>
