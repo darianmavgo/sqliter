@@ -57,9 +57,10 @@ func GetDefaultTemplates() *template.Template {
 
 // TableWriter handles writing HTML tables with configurable templates.
 type TableWriter struct {
-	templates *template.Template
-	config    *Config
-	editable  bool
+	templates    *template.Template
+	config       *Config
+	editable     bool
+	stickyHeader bool
 }
 
 // NewTableWriter creates a new TableWriter with the given templates.
@@ -68,12 +69,21 @@ func NewTableWriter(t *template.Template, cfg *Config) *TableWriter {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}
-	return &TableWriter{templates: t, config: cfg}
+	return &TableWriter{
+		templates:    t,
+		config:       cfg,
+		stickyHeader: cfg.StickyHeader,
+	}
 }
 
 // EnableEditable sets the editable flag for the table.
 func (tw *TableWriter) EnableEditable(editable bool) {
 	tw.editable = editable
+}
+
+// SetStickyHeader sets the sticky header flag for the table.
+func (tw *TableWriter) SetStickyHeader(sticky bool) {
+	tw.stickyHeader = sticky
 }
 
 // HeadData is the data passed to the head.html template.
@@ -118,7 +128,7 @@ func (tw *TableWriter) StartHTMLTable(w io.Writer, headers []string, title strin
 
 	data := HeadData{
 		Headers:      headers,
-		StickyHeader: tw.config.StickyHeader,
+		StickyHeader: tw.stickyHeader,
 		StyleSheet:   tw.config.StyleSheet,
 		CSS:          cssContent,
 		Title:        title,

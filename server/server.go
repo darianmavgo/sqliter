@@ -16,19 +16,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Server handles serving SQLite files.
 type Server struct {
-	config      *sqliter.Config
-	tableWriter *sqliter.TableWriter
+	config *sqliter.Config
 }
 
-// NewServer creates a new Server with the given configuration.
 func NewServer(cfg *sqliter.Config) *Server {
-	// Templates are now embedded and do not use the filesystem path from config
-	t := sqliter.GetDefaultTemplates()
 	return &Server{
-		config:      cfg,
-		tableWriter: sqliter.NewTableWriter(t, cfg),
+		config: cfg,
 	}
 }
 
@@ -40,11 +34,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	title := strings.TrimPrefix(r.URL.Path, "/")
 	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
+	title := filepath.Base(dataSetPath)
+	if dataSetPath == "" || title == "." {
+		title = strings.TrimPrefix(r.URL.Path, "/")
+	}
+
+	tw := sqliter.NewTableWriter(sqliter.GetDefaultTemplates(), s.config)
 
 	if dataSetPath == "" {
-		s.listFiles(w, title)
+		s.listFiles(w, tw, title)
 		return
 	}
 
@@ -68,7 +67,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
-		s.listTables(w, r, db, bq.DataSetPath, title)
+		s.listTables(w, r, db, tw, bq.DataSetPath, title)
 		return
 	}
 
@@ -81,27 +80,27 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.queryTable(w, db, bq, title)
+	s.queryTable(w, db, bq, tw, title)
 }
 
-func (s *Server) listFiles(w http.ResponseWriter, title string) {
+func (s *Server) listFiles(w http.ResponseWriter, tw *sqliter.TableWriter, title string) {
 	entries, err := os.ReadDir(s.config.DataDir)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	s.tableWriter.StartHTMLTable(w, []string{"Database"}, title)
+	tw.StartHTMLTable(w, []string{"Database"}, title)
 	for i, entry := range entries {
 		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
 			link := fmt.Sprintf("<a href='/%s'>%s</a>", entry.Name(), entry.Name())
-			s.tableWriter.WriteHTMLRow(w, i, []string{link})
+			tw.WriteHTMLRow(w, i, []string{link})
 		}
 	}
-	s.tableWriter.EndHTMLTable(w)
+	tw.EndHTMLTable(w)
 }
 
-func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, dbUrlPath string, title string) {
+func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, tw *sqliter.TableWriter, dbUrlPath string, title string) {
 	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
@@ -137,13 +136,13 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		return
 	}
 
-	s.tableWriter.StartHTMLTable(w, []string{"Table", "Type"}, title)
+	tw.StartHTMLTable(w, []string{"Table", "Type"}, title)
 	for i, t := range tables {
 		// Link format: /dbfile.db/tablename
 		link := fmt.Sprintf("<a href='%s/%s'>%s</a>", dbUrlPath, t.Name, t.Name)
-		s.tableWriter.WriteHTMLRow(w, i, []string{link, t.Type})
+		tw.WriteHTMLRow(w, i, []string{link, t.Type})
 	}
-	s.tableWriter.EndHTMLTable(w)
+	tw.EndHTMLTable(w)
 }
 
 func (s *Server) log(format string, args ...interface{}) {
@@ -152,10 +151,17 @@ func (s *Server) log(format string, args ...interface{}) {
 	}
 }
 
-func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, title string) {
-	if s.config.RowCRUD {
-		s.tableWriter.EnableEditable(true)
+func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, tw *sqliter.TableWriter, title string) {
+	editable := s.config.RowCRUD
+	sticky := s.config.StickyHeader
+
+	if bq.Table == "tb0" {
+		editable = false
+		sticky = false
 	}
+
+	tw.EnableEditable(editable)
+	tw.SetStickyHeader(sticky)
 	query := common.ConstructSQL(bq)
 	s.log("Executing query: %s", query)
 
@@ -172,7 +178,7 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		return
 	}
 
-	s.tableWriter.StartHTMLTable(w, columns, title)
+	tw.StartHTMLTable(w, columns, title)
 
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))
@@ -180,7 +186,7 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		valuePtrs[i] = &values[i]
 	}
 
-	var i int
+	var rowIdx int
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
 			s.log("Error scanning row: %v", err)
@@ -196,11 +202,11 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 			}
 		}
 
-		s.tableWriter.WriteHTMLRow(w, i, strValues)
-		i++
+		tw.WriteHTMLRow(w, rowIdx, strValues)
+		rowIdx++
 	}
 
-	s.tableWriter.EndHTMLTable(w)
+	tw.EndHTMLTable(w)
 }
 
 func (s *Server) handleCRUD(w http.ResponseWriter, r *http.Request, db *sql.DB, bq *banquet.Banquet) {
