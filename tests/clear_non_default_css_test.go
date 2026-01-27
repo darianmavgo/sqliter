@@ -48,7 +48,8 @@ func TestOnlyDefaultCSS(t *testing.T) {
 		// 2. Check for <style> tags in HTML, Go, and Template files
 		if !info.IsDir() && (strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".tmpl")) {
 			// Skip the test file itself and head.html which now has inline CSS
-			if strings.HasSuffix(path, "clear_non_default_css_test.go") || strings.HasSuffix(path, "head.html") {
+			// Also skip table_writer_test.go which checks for style tags in output
+			if strings.HasSuffix(path, "clear_non_default_css_test.go") || strings.HasSuffix(path, "head.html") || strings.HasSuffix(path, "table_writer_test.go") {
 				return nil
 			}
 			match, err := fileContainsStyleTag(path)
