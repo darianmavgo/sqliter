@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -202,8 +203,22 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 			}
 		}
 
-		tw.WriteHTMLRow(w, rowIdx, strValues)
+		if err := tw.WriteHTMLRow(w, rowIdx, strValues); err != nil {
+			// Check for broken pipe (client disconnected)
+			if strings.Contains(err.Error(), "broken pipe") {
+				// Stop processing silentely or with a single debug log
+				// s.log("Client disconnected (broken pipe), stopping response.")
+				return
+			}
+			s.logError("Error writing HTML row: %v", err)
+			return
+		}
 		rowIdx++
+
+		// Flush every 100 rows to keep browser responsive
+		if rowIdx%100 == 0 {
+			flush(w)
+		}
 	}
 
 	tw.EndHTMLTable(w)
@@ -265,5 +280,11 @@ func (s *Server) logError(format string, args ...interface{}) {
 	if err == nil {
 		defer f.Close()
 		log.New(f, "", log.LstdFlags).Println(msg)
+	}
+}
+
+func flush(w io.Writer) {
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
 	}
 }

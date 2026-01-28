@@ -80,12 +80,8 @@ func TestTableUXStructure(t *testing.T) {
 		}
 	}
 
-	// Check specifically that pencil emoji is around if possible,
-	// but strictly encoding of source file vs response might ensure HTML escape or raw bytes.
-	// We put '✏️' in template.
-	if !strings.Contains(body, "✏️") {
-		// Attempt checking assuming it might be escaped?
-		// But in Go templates it usually prints as is if not specialized.
-		t.Logf("Warning: Pencil emoji not found directly. Checking context...")
+	// User requested to confirm the pencil emoji is NOT there
+	if strings.Contains(body, "✏️") {
+		t.Errorf("UX Verification Failed: Pencil emoji found but should be absent.")
 	}
 }
