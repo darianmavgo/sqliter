@@ -46,29 +46,7 @@ th {
   background-clip: padding-box;
 }
 
-/* Sort indicators */
-th::after {
-  content: ' \2195';
-  /* Up-down arrow */
-  opacity: 0.4;
-  margin-left: 5px;
-  font-size: 0.8em;
-}
-
-th.sort-asc::after {
-  content: ' \2191';
-  /* Up arrow */
-  opacity: 1;
-  color: #00bc8c;
-  /* Primary accent color */
-}
-
-th.sort-desc::after {
-  content: ' \2193';
-  /* Down arrow */
-  opacity: 1;
-  color: #00bc8c;
-}
+/* Sort indicators removed */
 
 td {
   padding: 8px 12px;

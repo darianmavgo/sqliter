@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='*.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E"
     type="image/svg+xml">
   <title>{{if .Title}}{{.Title}}{{else}}SQLITER{{end}}</title>
   {{if .Editable}}
@@ -42,7 +42,7 @@
       {{end}}
 
       <tr>
-        <th class="row-id-header" title="Toggle Edit Mode">✏️</th>
+        <th class="row-id-header" title="Toggle Edit Mode"></th>
         {{ range .Headers}}
         <th data-sortable="true">{{ .}}</th>
         {{ end}}
