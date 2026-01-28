@@ -7,9 +7,19 @@ body {
   overflow: visible;
   background-color: #121212;
   color: #e0e0e0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 14px;
 }
 
+
+/* Force uniformity */
+code,
+pre,
+th,
+td {
+  font-family: inherit;
+  font-size: inherit;
+}
 
 table {
   border-collapse: separate;
