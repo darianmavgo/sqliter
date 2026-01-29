@@ -113,7 +113,6 @@ func main() {
 
 	cfg := sqliter.DefaultConfig()
 	cfg.DataDir = dataDir
-	cfg.ServeFolder = dataDir
 	cfg.Port = fmt.Sprintf("%d", port)
 	cfg.Verbose = true
 
@@ -139,16 +138,6 @@ func main() {
 
 	// Main table viewer routes
 	mux.Handle("/", srv)
-
-	// WASM asset routes
-	if cfg.EnableWASM {
-		mux.HandleFunc("/sqliter.wasm", srv.ServeWASMBinary)
-		mux.HandleFunc("/api/db/", srv.ServeDatabaseFile)
-
-		// Serve wasm_exec.js from templates
-		templatesDir := "sqliter/templates"
-		mux.Handle("/wasm_exec.js", http.StripPrefix("/", http.FileServer(http.Dir(templatesDir))))
-	}
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("[::]:%d", port), mux))
 }

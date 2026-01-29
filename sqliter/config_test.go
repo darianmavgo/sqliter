@@ -13,14 +13,10 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.DataDir != "sample_data" {
 		t.Errorf("Expected DataDir to be 'sample_data', got '%s'", cfg.DataDir)
 	}
-	if cfg.TemplateDir != "templates" {
-		t.Errorf("Expected TemplateDir to be 'templates', got '%s'", cfg.TemplateDir)
-	}
 }
 
 func TestLoadConfig(t *testing.T) {
-	content := `data_dir = "test_data"
-template_dir = "test_templates"`
+	content := `data_dir = "test_data"`
 	tmpdir := testutil.GetTestOutputDir(t, "config_test")
 	// defer os.RemoveAll(tmpdir)
 
@@ -36,9 +32,6 @@ template_dir = "test_templates"`
 
 	if cfg.DataDir != "test_data" {
 		t.Errorf("Expected DataDir to be 'test_data', got '%s'", cfg.DataDir)
-	}
-	if cfg.TemplateDir != "test_templates" {
-		t.Errorf("Expected TemplateDir to be 'test_templates', got '%s'", cfg.TemplateDir)
 	}
 }
 
@@ -59,8 +52,5 @@ func TestLoadConfigDefaults(t *testing.T) {
 
 	if cfg.DataDir != "sample_data" {
 		t.Errorf("Expected DataDir to be 'sample_data', got '%s'", cfg.DataDir)
-	}
-	if cfg.TemplateDir != "templates" {
-		t.Errorf("Expected TemplateDir to be 'templates', got '%s'", cfg.TemplateDir)
 	}
 }
