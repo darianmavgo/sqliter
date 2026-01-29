@@ -134,7 +134,23 @@ func main() {
 	// Attempt to open browser (best effort)
 	openBrowser(url)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("[::]:%d", port), srv))
+	// Setup HTTP routes
+	mux := http.NewServeMux()
+
+	// Main table viewer routes
+	mux.Handle("/", srv)
+
+	// WASM asset routes
+	if cfg.EnableWASM {
+		mux.HandleFunc("/sqliter.wasm", srv.ServeWASMBinary)
+		mux.HandleFunc("/api/db/", srv.ServeDatabaseFile)
+
+		// Serve wasm_exec.js from templates
+		templatesDir := "sqliter/templates"
+		mux.Handle("/wasm_exec.js", http.StripPrefix("/", http.FileServer(http.Dir(templatesDir))))
+	}
+
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("[::]:%d", port), mux))
 }
 
 func openBrowser(url string) {

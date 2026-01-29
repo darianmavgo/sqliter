@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -41,6 +42,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		title = strings.TrimPrefix(r.URL.Path, "/")
 	}
 
+	// Use WASM rendering if enabled
+	if s.config.EnableWASM && dataSetPath != "" && bq.Table != "" {
+		s.serveWASMViewer(w, r, dataSetPath, bq.Table)
+		return
+	}
+
 	tw := sqliter.NewTableWriter(sqliter.GetDefaultTemplates(), s.config)
 
 	if dataSetPath == "" {
@@ -66,6 +73,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
+
+	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000;"); err != nil {
+		s.logError("Error setting PRAGMAs: %v", err)
+	}
 
 	if bq.Table == "sqlite_master" || bq.Table == "" {
 		s.listTables(w, r, db, tw, bq.DataSetPath, title)
@@ -179,7 +190,15 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		return
 	}
 
-	tw.StartHTMLTable(w, columns, title)
+	// Manually set editable header since bufio wrapper hides http.ResponseWriter
+	if editable {
+		w.Header().Set("X-SQLiter-Editable", "true")
+	}
+
+	bw := bufio.NewWriterSize(w, 65536)
+	defer bw.Flush()
+
+	tw.StartHTMLTable(bw, columns, title)
 
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))
@@ -203,7 +222,7 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 			}
 		}
 
-		if err := tw.WriteHTMLRow(w, rowIdx, strValues); err != nil {
+		if err := tw.WriteHTMLRow(bw, rowIdx, strValues); err != nil {
 			// Check for broken pipe (client disconnected)
 			if strings.Contains(err.Error(), "broken pipe") {
 				// Stop processing silentely or with a single debug log
@@ -214,14 +233,9 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 			return
 		}
 		rowIdx++
-
-		// Flush every 100 rows to keep browser responsive
-		if rowIdx%100 == 0 {
-			flush(w)
-		}
 	}
 
-	tw.EndHTMLTable(w)
+	tw.EndHTMLTable(bw)
 }
 
 func (s *Server) handleCRUD(w http.ResponseWriter, r *http.Request, db *sql.DB, bq *banquet.Banquet) {
@@ -287,4 +301,65 @@ func flush(w io.Writer) {
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// serveWASMViewer renders the WASM-based canvas table viewer
+func (s *Server) serveWASMViewer(w http.ResponseWriter, r *http.Request, dbFile string, table string) {
+	tmpl := sqliter.GetDefaultTemplates()
+	if tmpl == nil {
+		http.Error(w, "Templates not available", http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		Title        string
+		DatabaseFile string
+		Table        string
+	}{
+		Title:        filepath.Base(dbFile),
+		DatabaseFile: dbFile,
+		Table:        table,
+	}
+
+	if err := tmpl.ExecuteTemplate(w, "wasm_table.html", data); err != nil {
+		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
+	}
+}
+
+// ServeDatabaseFile serves a raw SQLite database file for WASM download
+func (s *Server) ServeDatabaseFile(w http.ResponseWriter, r *http.Request) {
+	// Extract database filename from URL
+	path := strings.TrimPrefix(r.URL.Path, "/api/db/")
+
+	// Security check
+	if strings.Contains(path, "..") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	dbPath := filepath.Join(s.config.DataDir, path)
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		http.Error(w, "Database not found", http.StatusNotFound)
+		return
+	}
+
+	// Set headers for database download
+	w.Header().Set("Content-Type", "application/x-sqlite3")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	http.ServeFile(w, r, dbPath)
+}
+
+// ServeWASMBinary serves the compiled WASM binary
+func (s *Server) ServeWASMBinary(w http.ResponseWriter, r *http.Request) {
+	if _, err := os.Stat(s.config.WASMBinaryPath); os.IsNotExist(err) {
+		http.Error(w, "WASM binary not found. Run ./scripts/build_wasm.sh", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/wasm")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+
+	http.ServeFile(w, r, s.config.WASMBinaryPath)
 }

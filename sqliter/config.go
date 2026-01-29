@@ -55,6 +55,12 @@ type Config struct {
 	// LogDir is the directory where logs will be stored.
 	// Defaults to "logs".
 	LogDir string `hcl:"log_dir,optional"`
+
+	// EnableWASM enables WebAssembly-based client-side rendering
+	EnableWASM bool `hcl:"enable_wasm,optional"`
+
+	// WASMBinaryPath is the path to the compiled sqliter.wasm file
+	WASMBinaryPath string `hcl:"wasm_binary_path,optional"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -73,6 +79,8 @@ func DefaultConfig() *Config {
 		AutoSelectTb0:           true,
 		RowCRUD:                 false,
 		LogDir:                  "logs",
+		EnableWASM:              false,
+		WASMBinaryPath:          "bin/sqliter.wasm",
 	}
 }
 

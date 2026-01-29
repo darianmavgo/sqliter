@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - WASM Canvas Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #header {
+            background: #2c3e50;
+            color: white;
+            padding: 16px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        #header h1 {
+            font-size: 20px;
+            font-weight: 500;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        #loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background: white;
+            overflow: hidden;
+        }
+        
+        #table-canvas {
+            display: block;
+            cursor: default;
+        }
+        
+        #stats {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="header">
+            <h1>{{.Title}}</h1>
+        </div>
+        
+        <div id="loading">
+            <div id="loading-spinner"></div>
+            <div id="loading-text">Initializing WASM module...</div>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="table-canvas"></canvas>
+            <div id="stats" class="hidden">
+                Rows: <span id="row-count">0</span> | 
+                FPS: <span id="fps">0</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="wasm_exec.js"></script>
+    <script>
+        const loadingDiv = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
+        const canvas = document.getElementById('table-canvas');
+        const statsDiv = document.getElementById('stats');
+        const rowCountSpan = document.getElementById('row-count');
+        const fpsSpan = document.getElementById('fps');
+        
+        let renderer = null;
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+
+        // Update loading status
+        function updateStatus(message) {
+            loadingText.textContent = message;
+            console.log('[WASM]', message);
+        }
+
+        // Initialize WASM
+        async function initWASM() {
+            try {
+                updateStatus('Loading WASM module...');
+                
+                const go = new Go();
+                const result = await WebAssembly.instantiateStreaming(
+                    fetch('/sqliter.wasm'),
+                    go.importObject
+                );
+                
+                go.run(result.instance);
+                
+                updateStatus('WASM module loaded');
+                return true;
+            } catch (err) {
+                updateStatus('Error loading WASM: ' + err.message);
+                console.error(err);
+                return false;
+            }
+        }
+
+        // Download and cache database
+        async function loadDatabase() {
+            try {
+                updateStatus('Downloading database...');
+                
+                const dbFile = '{{.DatabaseFile}}';
+                const response = await fetch('/api/db/' + dbFile);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to download database');
+                }
+                
+                const dbBytes = await response.arrayBuffer();
+                
+                updateStatus('Opening database in WASM...');
+                
+                // Convert to Uint8Array for WASM
+                const uint8Array = new Uint8Array(dbBytes);
+                const result = sqliterWASM.openDatabase(uint8Array);
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                updateStatus('Database opened');
+                return true;
+            } catch (err) {
+                updateStatus('Database error: ' + err.message);
+                console.error(err);
+                return false;
+            }
+        }
+
+        // Initialize renderer and execute query
+        async function initRenderer() {
+            try {
+                updateStatus('Creating canvas renderer...');
+                
+                // Set canvas size
+                resizeCanvas();
+                
+                // Create renderer
+                const width = canvas.width;
+                const height = canvas.height;
+                renderer = sqliterWASM.createRenderer('table-canvas', width, height);
+                
+                if (renderer.error) {
+                    throw new Error(renderer.error);
+                }
+                
+                updateStatus('Executing query...');
+                
+                // Execute query
+                const query = "SELECT * FROM {{.Table}} LIMIT 10000";
+                const queryResult = sqliterWASM.executeQuery(query);
+                
+                if (queryResult.error) {
+                    throw new Error(queryResult.error);
+                }
+                
+                rowCountSpan.textContent = queryResult.rowCount;
+                
+                updateStatus('Rendering table...');
+                
+                // Initial render
+                renderer.render();
+                
+                // Hide loading, show stats
+                loadingDiv.classList.add('hidden');
+                statsDiv.classList.remove('hidden');
+                
+                console.log('[WASM] Renderer ready:', queryResult.rowCount, 'rows');
+                
+                return true;
+            } catch (err) {
+                updateStatus('Renderer error: ' + err.message);
+                console.error(err);
+                return false;
+            }
+        }
+
+        // Handle canvas resize
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = container.clientWidth * dpr;
+            canvas.height = container.clientHeight * dpr;
+            canvas.style.width = container.clientWidth + 'px';
+            canvas.style.height = container.clientHeight + 'px';
+            
+            if (renderer) {
+                renderer.setSize(canvas.width, canvas.height);
+                renderer.render();
+            }
+        }
+
+        // Handle scroll events
+        let scrollY = 0;
+        let scrollX = 0;
+        
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            scrollX += e.deltaX;
+            scrollY += e.deltaY;
+            
+            if (renderer) {
+                renderer.scrollTo(scrollX, scrollY);
+                updateFPS();
+            }
+        }, { passive: false });
+
+        // Window resize handling
+        window.addEventListener('resize', resizeCanvas);
+
+        // FPS tracking
+        function updateFPS() {
+            const now = performance.now();
+            frameCount++;
+            
+            if (now - lastFrameTime >= 1000) {
+                fpsSpan.textContent = frameCount;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+        }
+
+        // Main initialization
+        async function main() {
+            const wasmOK = await initWASM();
+            if (!wasmOK) return;
+            
+            const dbOK = await loadDatabase();
+            if (!dbOK) return;
+            
+            const rendererOK = await initRenderer();
+            if (!rendererOK) return;
+            
+            console.log('[WASM] Application ready');
+        }
+
+        // Start application
+        main();
+    </script>
+</body>
+</html>

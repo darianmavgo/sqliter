@@ -5,6 +5,7 @@ go 1.24.3
 require (
 	github.com/darianmavgo/banquet v0.0.0-20260120041833-a06f263496af
 	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/ncruces/go-sqlite3 v0.30.5
 	modernc.org/sqlite v1.44.2
 )
 
@@ -22,7 +23,9 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.32.0 // indirect
