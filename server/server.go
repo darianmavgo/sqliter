@@ -94,7 +94,37 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.apiQueryTable(w, r)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/sqliter/logs") {
+		s.handleClientLogs(w, r)
+		return
+	}
 	http.Error(w, "Not found", http.StatusNotFound)
+}
+
+func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		Level   string      `json:"level"`
+		Message interface{} `json:"message"` // Helper to accept strings or objects
+	}
+
+	// Limit body size to prevent abuse
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*10) // 10KB max log
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		// Silently fail or log distinct error
+		return
+	}
+
+	// Format: [CLIENT] [LEVEL] Message
+	// We use standard log.Printf which goes to stderr/stdout
+	log.Printf("[CLIENT] [%s] %v", strings.ToUpper(payload.Level), payload.Message)
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
