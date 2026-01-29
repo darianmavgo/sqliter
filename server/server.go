@@ -1,15 +1,17 @@
 package server
 
 import (
-	"bufio"
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/darianmavgo/banquet"
@@ -17,6 +19,9 @@ import (
 	"github.com/darianmavgo/sqliter/sqliter"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed ui/*
+var uiFS embed.FS
 
 type Server struct {
 	config *sqliter.Config
@@ -30,104 +35,119 @@ func NewServer(cfg *sqliter.Config) *Server {
 
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	bq, err := banquet.ParseNested(r.URL.String())
+	// 1. API Handling
+	if strings.HasPrefix(r.URL.Path, "/sqliter/") {
+		s.handleAPI(w, r)
+		return
+	}
+
+	// 2. Serve Static Assets (React App)
+	// We want to serve files from "ui" directory in the embedded FS.
+	distFS, err := fs.Sub(uiFS, "ui")
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing URL: %v", err), http.StatusBadRequest)
+		s.logError("Failed to get dist FS: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
-	title := filepath.Base(dataSetPath)
-	if dataSetPath == "" || title == "." {
-		title = strings.TrimPrefix(r.URL.Path, "/")
+	// Clean path to prevent .. traversal (though fs.Open handles this)
+	path := strings.TrimPrefix(r.URL.Path, "/")
+	if path == "" {
+		path = "index.html"
 	}
 
-	// Use WASM rendering if enabled
-	if s.config.EnableWASM && dataSetPath != "" && bq.Table != "" {
-		s.serveWASMViewer(w, r, dataSetPath, bq.Table)
+	// Try to open the file
+	f, err := distFS.Open(path)
+	if err == nil {
+		// File exists, serve it
+		defer f.Close()
+		stat, _ := f.Stat()
+		http.ServeContent(w, r, path, stat.ModTime(), f.(io.ReadSeeker))
 		return
 	}
 
-	tw := sqliter.NewTableWriter(sqliter.GetDefaultTemplates(), s.config)
+	// 3. SPA Fallback: If not found and not an API call, serve index.html
+	// This allows React Router to handle /mydb.db/table path
+	index, err := distFS.Open("index.html")
+	if err != nil {
+		http.Error(w, "UI not found. Please run build.", http.StatusNotFound)
+		return
+	}
+	defer index.Close()
+	stat, _ := index.Stat()
+	http.ServeContent(w, r, "index.html", stat.ModTime(), index.(io.ReadSeeker))
+}
 
-	if dataSetPath == "" {
-		s.listFiles(w, tw, title)
+func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*") // For development
+
+	if strings.HasPrefix(r.URL.Path, "/sqliter/fs") {
+		s.apiListFiles(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/sqliter/tables") {
+		s.apiListTables(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/sqliter/rows") {
+		s.apiQueryTable(w, r)
+		return
+	}
+	http.Error(w, "Not found", http.StatusNotFound)
+}
+
+func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
+	entries, err := os.ReadDir(s.config.DataDir)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	// Security check: simple directory traversal prevention
-	if strings.Contains(dataSetPath, "..") {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+	type FileEntry struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	var files []FileEntry
+
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
+			files = append(files, FileEntry{Name: entry.Name(), Type: "database"})
+		}
+	}
+	json.NewEncoder(w).Encode(files)
+}
+
+func (s *Server) apiListTables(w http.ResponseWriter, r *http.Request) {
+	dbName := r.URL.Query().Get("db")
+	if dbName == "" {
+		http.Error(w, `{"error": "db parameter required"}`, http.StatusBadRequest)
 		return
 	}
 
-	dbPath := filepath.Join(s.config.DataDir, dataSetPath)
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		http.Error(w, "File not found: "+dataSetPath, http.StatusNotFound)
+	if strings.Contains(dbName, "..") {
+		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
 		return
 	}
 
+	dbPath := filepath.Join(s.config.DataDir, dbName)
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error opening DB: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"error": "Error opening DB: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 	defer db.Close()
 
-	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000;"); err != nil {
-		s.logError("Error setting PRAGMAs: %v", err)
-	}
-
-	if bq.Table == "sqlite_master" || bq.Table == "" {
-		s.listTables(w, r, db, tw, bq.DataSetPath, title)
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		if !s.config.RowCRUD {
-			http.Error(w, "Row CRUD is disabled", http.StatusForbidden)
-			return
-		}
-		s.handleCRUD(w, r, db, bq)
-		return
-	}
-
-	s.queryTable(w, db, bq, tw, title)
-}
-
-func (s *Server) listFiles(w http.ResponseWriter, tw *sqliter.TableWriter, title string) {
-	entries, err := os.ReadDir(s.config.DataDir)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error reading DataDir: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	tw.StartHTMLTable(w, []string{"Database"}, title)
-	for i, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			link := fmt.Sprintf("<a href='/%s'>%s</a>", entry.Name(), entry.Name())
-			tw.WriteHTMLRow(w, i, []string{link})
-		}
-	}
-	tw.EndHTMLTable(w)
-}
-
-func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, tw *sqliter.TableWriter, dbUrlPath string, title string) {
 	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"error": "Database error: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	// Ensure absolute path
-	if !strings.HasPrefix(dbUrlPath, "/") {
-		dbUrlPath = "/" + dbUrlPath
-	}
-
 	type TableInfo struct {
-		Name string
-		Type string
+		Name string `json:"name"`
+		Type string `json:"type"`
 	}
 
 	var tables []TableInfo
@@ -138,67 +158,116 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request, db *sql.DB, 
 		}
 		tables = append(tables, TableInfo{Name: name, Type: type_})
 	}
+	json.NewEncoder(w).Encode(tables)
+}
 
-	// Auto-redirect if enabled and only one table
-	if s.config.AutoRedirectSingleTable && len(tables) == 1 {
-		redirectUrl := dbUrlPath + "/" + tables[0].Name
-		// Clean up double slashes just in case
-		redirectUrl = strings.ReplaceAll(redirectUrl, "//", "/")
-		http.Redirect(w, r, redirectUrl, http.StatusFound)
+func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
+	// Expecting 'path' parameter which is a Banquet URL, OR separate db/table/params
+	// For simplicity and alignment with the plan, let's look for 'path' or construct it.
+
+	// If 'path' is provided, parse it.
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		// Fallback: try to construct from db/table params for basic usage
+		db := r.URL.Query().Get("db")
+		table := r.URL.Query().Get("table")
+		if db != "" && table != "" {
+			path = "/" + db + "/" + table
+		} else {
+			http.Error(w, `{"error": "path or db+table parameters required"}`, http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Append standard grid params if not already in path
+	// AgGrid sends: start, end, sortCol, sortDir
+	qs := r.URL.Query()
+	start := qs.Get("start")
+	end := qs.Get("end")
+	sortCol := qs.Get("sortCol")
+	sortDir := qs.Get("sortDir")
+
+	// We can rely on Banquet parsing, but we might need to inject these if they are separate.
+	// simpler to just re-parse the path and then override specifics if provided.
+
+	bq, err := banquet.ParseNested(path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Error parsing URL: %v"}`, err), http.StatusBadRequest)
 		return
 	}
 
-	tw.StartHTMLTable(w, []string{"Table", "Type"}, title)
-	for i, t := range tables {
-		// Link format: /dbfile.db/tablename
-		link := fmt.Sprintf("<a href='%s/%s'>%s</a>", dbUrlPath, t.Name, t.Name)
-		tw.WriteHTMLRow(w, i, []string{link, t.Type})
-	}
-	tw.EndHTMLTable(w)
-}
-
-func (s *Server) log(format string, args ...interface{}) {
-	if s.config.Verbose {
-		log.Printf(format, args...)
-	}
-}
-
-func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banquet, tw *sqliter.TableWriter, title string) {
-	editable := s.config.RowCRUD
-	sticky := s.config.StickyHeader
-
-	if bq.Table == "tb0" {
-		editable = false
-		sticky = false
+	// Override limit/offset if provided by AgGrid params
+	if start != "" && end != "" {
+		sIdx, _ := strconv.Atoi(start)
+		eIdx, _ := strconv.Atoi(end)
+		limit := eIdx - sIdx
+		bq.Limit = fmt.Sprintf("%d", limit)
+		bq.Offset = fmt.Sprintf("%d", sIdx)
 	}
 
-	tw.EnableEditable(editable)
-	tw.SetStickyHeader(sticky)
+	if sortCol != "" {
+		bq.OrderBy = sortCol
+		if sortDir != "" {
+			bq.SortDirection = sortDir
+		}
+	}
+
+	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
+	if strings.Contains(dataSetPath, "..") {
+		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
+		return
+	}
+
+	dbPath := filepath.Join(s.config.DataDir, dataSetPath)
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Error opening DB: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000;"); err != nil {
+		s.logError("Error setting PRAGMAs: %v", err)
+	}
+
 	query := common.ConstructSQL(bq)
-	s.log("Executing query: %s", query)
+
+	// Get total count for pagination (optional, but good for AgGrid infinite model)
+	// We'll do a separate count query
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", bq.Table)
+	if bq.Where != "" {
+		countQuery += " WHERE " + bq.Where
+	}
+	var totalCount int
+	_ = db.QueryRow(countQuery).Scan(&totalCount)
 
 	rows, err := db.Query(query)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query error: %v\nQuery: %s", err, query), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"error": "Query error: %v", "sql": "%s"}`, err, query), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error getting columns: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"error": "Error getting columns: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	// Manually set editable header since bufio wrapper hides http.ResponseWriter
-	if editable {
-		w.Header().Set("X-SQLiter-Editable", "true")
+	// Result structure
+	type APIResponse struct {
+		Columns    []string                 `json:"columns"`
+		Rows       []map[string]interface{} `json:"rows"`
+		TotalCount int                      `json:"totalCount"`
+		SQL        string                   `json:"sql"`
 	}
 
-	bw := bufio.NewWriterSize(w, 65536)
-	defer bw.Flush()
-
-	tw.StartHTMLTable(bw, columns, title)
+	resp := APIResponse{
+		Columns:    columns,
+		TotalCount: totalCount,
+		SQL:        query,
+		Rows:       []map[string]interface{}{},
+	}
 
 	values := make([]interface{}, len(columns))
 	valuePtrs := make([]interface{}, len(columns))
@@ -206,76 +275,24 @@ func (s *Server) queryTable(w http.ResponseWriter, db *sql.DB, bq *banquet.Banqu
 		valuePtrs[i] = &values[i]
 	}
 
-	var rowIdx int
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
-			s.log("Error scanning row: %v", err)
 			continue
 		}
 
-		strValues := make([]string, len(columns))
-		for i, val := range values {
-			if val == nil {
-				strValues[i] = "NULL"
+		rowMap := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				rowMap[col] = string(b)
 			} else {
-				strValues[i] = fmt.Sprintf("%v", val)
+				rowMap[col] = val
 			}
 		}
-
-		if err := tw.WriteHTMLRow(bw, rowIdx, strValues); err != nil {
-			// Check for broken pipe (client disconnected)
-			if strings.Contains(err.Error(), "broken pipe") {
-				// Stop processing silentely or with a single debug log
-				// s.log("Client disconnected (broken pipe), stopping response.")
-				return
-			}
-			s.logError("Error writing HTML row: %v", err)
-			return
-		}
-		rowIdx++
+		resp.Rows = append(resp.Rows, rowMap)
 	}
 
-	tw.EndHTMLTable(bw)
-}
-
-func (s *Server) handleCRUD(w http.ResponseWriter, r *http.Request, db *sql.DB, bq *banquet.Banquet) {
-	var payload struct {
-		Action string                 `json:"action"`
-		Data   map[string]interface{} `json:"data"`
-		Where  map[string]interface{} `json:"where"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		s.logError("Error decoding JSON: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	var query string
-	var args []interface{}
-
-	switch payload.Action {
-	case "create":
-		query, args = common.ConstructInsert(bq.Table, payload.Data)
-	case "update":
-		query, args = common.ConstructUpdate(bq.Table, payload.Data, payload.Where)
-	case "delete":
-		query, args = common.ConstructDelete(bq.Table, payload.Where)
-	default:
-		http.Error(w, "Invalid action", http.StatusBadRequest)
-		return
-	}
-
-	s.log("Executing CRUD %s: %s", payload.Action, query)
-
-	if _, err := db.Exec(query, args...); err != nil {
-		s.logError("Error executing CRUD: %v", err)
-		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) logError(format string, args ...interface{}) {
@@ -297,39 +314,10 @@ func (s *Server) logError(format string, args ...interface{}) {
 	}
 }
 
-func flush(w io.Writer) {
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// serveWASMViewer renders the WASM-based canvas table viewer
-func (s *Server) serveWASMViewer(w http.ResponseWriter, r *http.Request, dbFile string, table string) {
-	tmpl := sqliter.GetDefaultTemplates()
-	if tmpl == nil {
-		http.Error(w, "Templates not available", http.StatusInternalServerError)
-		return
-	}
-
-	data := struct {
-		Title        string
-		DatabaseFile string
-		Table        string
-	}{
-		Title:        filepath.Base(dbFile),
-		DatabaseFile: dbFile,
-		Table:        table,
-	}
-
-	if err := tmpl.ExecuteTemplate(w, "wasm_table.html", data); err != nil {
-		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
-	}
-}
-
 // ServeDatabaseFile serves a raw SQLite database file for WASM download
 func (s *Server) ServeDatabaseFile(w http.ResponseWriter, r *http.Request) {
 	// Extract database filename from URL
-	path := strings.TrimPrefix(r.URL.Path, "/api/db/")
+	path := strings.TrimPrefix(r.URL.Path, "/sqliter/db/")
 
 	// Security check
 	if strings.Contains(path, "..") {
