@@ -82,3 +82,4 @@ go_build_github_com_mavgo_com_flight
 # Exceptions
 !package.json
 !package-lock.json
+sqliter/ui/

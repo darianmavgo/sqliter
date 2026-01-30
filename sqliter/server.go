@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/banquet/sqlite"
@@ -133,24 +136,99 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 	abs, _ := filepath.Abs(s.config.ServeFolder)
-	log.Printf("[API] Listing files from: %s", abs)
-	entries, err := os.ReadDir(s.config.ServeFolder)
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "%v"}`, err), http.StatusInternalServerError)
-		return
-	}
+	log.Printf("[API] Recursive scan (8 parallel workers, 10s timeout): %s", abs)
 
 	type FileEntry struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
-	var files []FileEntry
 
-	for _, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".db") || strings.HasSuffix(entry.Name(), ".sqlite") || strings.HasSuffix(entry.Name(), ".csv.db") || strings.HasSuffix(entry.Name(), ".xlsx.db")) {
-			files = append(files, FileEntry{Name: entry.Name(), Type: "database"})
+	queue := make(chan string, 100000)
+	resultsChan := make(chan string, 10000)
+	sem := make(chan struct{}, 8)
+	var pending int32
+
+	addWork := func(path string) {
+		atomic.AddInt32(&pending, 1)
+		select {
+		case queue <- path:
+		default:
+			atomic.AddInt32(&pending, -1)
+			log.Printf("[SERVER] Queue full, skipping directory: %s", path)
 		}
 	}
+
+	addWork(s.config.ServeFolder)
+
+	// Monitor pending count to close queue
+	go func() {
+		for {
+			if atomic.LoadInt32(&pending) == 0 {
+				close(queue)
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	var walkWG sync.WaitGroup
+
+	// Manager routine to launch workers
+	go func() {
+		for dir := range queue {
+			sem <- struct{}{} // Acquire worker slot
+			walkWG.Add(1)
+			go func(d string) {
+				defer walkWG.Done()
+
+				// Channel to signal internal scan completion
+				done := make(chan bool, 1)
+
+				go func() {
+					entries, err := os.ReadDir(d)
+					if err == nil {
+						for _, entry := range entries {
+							fullPath := filepath.Join(d, entry.Name())
+							if entry.IsDir() {
+								// Skip hidden directories to avoid infinite recursion or sensitive areas
+								if !strings.HasPrefix(entry.Name(), ".") {
+									addWork(fullPath)
+								}
+							} else {
+								name := entry.Name()
+								if strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") ||
+									strings.HasSuffix(name, ".csv.db") || strings.HasSuffix(name, ".xlsx.db") {
+									rel, err := filepath.Rel(s.config.ServeFolder, fullPath)
+									if err == nil {
+										resultsChan <- rel
+									}
+								}
+							}
+						}
+					}
+					done <- true
+				}()
+
+				select {
+				case <-done:
+					<-sem // Release normal slot
+				case <-time.After(10 * time.Second):
+					log.Printf("[SERVER] Worker stalled > 10s on %s - releasing slot to move on", d)
+					<-sem // Release slot so another worker can start
+				}
+				atomic.AddInt32(&pending, -1)
+			}(dir)
+		}
+		walkWG.Wait()
+		close(resultsChan)
+	}()
+
+	var files []FileEntry
+	for res := range resultsChan {
+		files = append(files, FileEntry{Name: res, Type: "database"})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
 }
 

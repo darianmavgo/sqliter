@@ -21,7 +21,18 @@ const FileList = () => {
   useEffect(() => {
     fetch('/sqliter/fs')
       .then(r => r.json())
-      .then(d => setRowData(d || []));
+      .then(d => {
+        if (Array.isArray(d)) {
+          setRowData(d);
+        } else {
+          console.error("API Error or unexpected response:", d);
+          setRowData([]);
+        }
+      })
+      .catch(err => {
+        console.error("Fetch error:", err);
+        setRowData([]);
+      });
   }, []);
 
   const [colDefs] = useState([
