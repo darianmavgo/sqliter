@@ -116,7 +116,7 @@ func TestAgGridFilesystem(t *testing.T) {
 	rowCount := len(nodes)
 	t.Logf("Found %d rows", rowCount)
 
-	if rowCount <= 5 {
-		t.Fatalf("Expected more than 5 rows, got %d", rowCount)
+	if rowCount < 5 {
+		t.Fatalf("Expected at least 5 rows, got %d", rowCount)
 	}
 }

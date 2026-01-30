@@ -10,9 +10,9 @@ cd ..
 
 # 2. Update Server Assets
 echo "Updating Server Assets..."
-rm -rf server/ui
-mkdir -p server/ui
-cp -R react-client/dist/* server/ui/
+rm -rf sqliter/ui
+mkdir -p sqliter/ui
+cp -R react-client/dist/* sqliter/ui/
 
 # 3. Build Go Server
 echo "Building Go Server..."
