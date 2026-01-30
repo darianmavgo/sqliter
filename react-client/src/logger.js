@@ -57,6 +57,14 @@ export const initLogger = () => {
         originalInfo.apply(console, args);
         sendLog('info', args);
     };
+
+    window.onerror = (message, source, lineno, colno, error) => {
+        sendLog('error', [`Global Error: ${message} at ${source}:${lineno}:${colno}`, error]);
+    };
+
+    window.onunhandledrejection = (event) => {
+        sendLog('error', ['Unhandled Rejection:', event.reason]);
+    };
     
     // Initial log to verify connection
     console.info("Client Logger Initialized");
