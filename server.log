@@ -1,0 +1,6 @@
+Launching sqliter view...
+Data Directory: /app/sample_data
+Listening at: http://[::1]:35815
+SERVING_AT=http://[::1]:35815
+2026/01/30 20:44:35 [CLIENT] [INFO] Client Logger Initialized
+2026/01/30 20:44:35 [CLIENT] [INFO] Logger initialized from Main.jsx

@@ -33,16 +33,17 @@ const FileList = () => {
   ]);
 
   return (
-      <AgGridReact
-          style={{ width: '100%', height: '100%' }}
-          className="ag-theme-alpine-dark"
-          theme="legacy"
-          rowData={rowData}
-          columnDefs={colDefs}
-          defaultColDef={{sortable: true, filter: true, resizable: true}}
-          rowHeight={32}
-          headerHeight={32}
-      />
+      <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
+        <AgGridReact
+            className="ag-theme-alpine-dark"
+            theme="legacy"
+            rowData={rowData}
+            columnDefs={colDefs}
+            defaultColDef={{sortable: true, filter: true, resizable: true}}
+            rowHeight={32}
+            headerHeight={32}
+        />
+      </div>
   );
 };
 
@@ -80,25 +81,33 @@ const TableList = () => {
     ]);
 
     return (
-        <AgGridReact
-            style={{ width: '100%', height: '100%' }}
-            className="ag-theme-alpine-dark"
-            theme="legacy"
-            rowData={tables}
-            columnDefs={colDefs}
-            defaultColDef={{sortable: true, filter: true, resizable: true}}
-            rowHeight={32}
-            headerHeight={32}
-        />
+        <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
+            <AgGridReact
+                className="ag-theme-alpine-dark"
+                theme="legacy"
+                rowData={tables}
+                columnDefs={colDefs}
+                defaultColDef={{sortable: true, filter: true, resizable: true}}
+                rowHeight={32}
+                headerHeight={32}
+            />
+        </div>
     );
 }
 
 const GridView = () => {
-    const { db, table } = useParams();
+    const params = useParams();
+    const db = params.db;
+    const table = params.table;
+    const rest = params["*"];
+
     const [colDefs, setColDefs] = useState([]);
 
     useEffect(() => {
-         const path = `/${db}/${table}`;
+         let path = `/${db}/${table}`;
+         if (rest) {
+             path += `/${rest}`;
+         }
          fetch(`/sqliter/rows?path=${path}&start=0&end=0`)
             .then(r => r.json())
             .then(data => {
@@ -110,14 +119,17 @@ const GridView = () => {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
                 }
             });
-    }, [db, table]);
+    }, [db, table, rest]);
 
     const onGridReady = useCallback((params) => {
         const dataSource = {
             rowCount: undefined,
             getRows: (wsParams) => {
                 const { startRow, endRow, sortModel } = wsParams;
-                const path = `/${db}/${table}`;
+                let path = `/${db}/${table}`;
+                if (rest) {
+                    path += `/${rest}`;
+                }
                 let url = `/sqliter/rows?path=${path}&start=${startRow}&end=${endRow}`;
                 
                 if (sortModel.length > 0) {
@@ -141,21 +153,22 @@ const GridView = () => {
             }
         };
         params.api.setGridOption('datasource', dataSource);
-    }, [db, table]);
+    }, [db, table, rest]);
 
     return (
-        <AgGridReact
-            style={{ width: '100%', height: '100%' }}
-            className="ag-theme-alpine-dark"
-            theme="legacy"
-            columnDefs={colDefs}
-            rowModelType={'infinite'}
-            onGridReady={onGridReady}
-            cacheBlockSize={100}
-            maxBlocksInCache={10}
-            rowHeight={32}
-            headerHeight={32}
-        />
+        <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
+            <AgGridReact
+                className="ag-theme-alpine-dark"
+                theme="legacy"
+                columnDefs={colDefs}
+                rowModelType={'infinite'}
+                onGridReady={onGridReady}
+                cacheBlockSize={100}
+                maxBlocksInCache={10}
+                rowHeight={32}
+                headerHeight={32}
+            />
+        </div>
     );
 };
 
@@ -166,7 +179,7 @@ const App = () => {
         <Routes>
             <Route path="/" element={<FileList />} />
             <Route path="/:db" element={<TableList />} />
-            <Route path="/:db/:table" element={<GridView />} />
+            <Route path="/:db/:table/*" element={<GridView />} />
         </Routes>
     </BrowserRouter>
   );
