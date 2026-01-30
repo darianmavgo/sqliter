@@ -34,6 +34,7 @@ const FileList = () => {
 
   return (
       <AgGridReact
+          style={{ width: '100%', height: '100%' }}
           className="ag-theme-alpine-dark"
           theme="legacy"
           rowData={rowData}
@@ -80,6 +81,7 @@ const TableList = () => {
 
     return (
         <AgGridReact
+            style={{ width: '100%', height: '100%' }}
             className="ag-theme-alpine-dark"
             theme="legacy"
             rowData={tables}
@@ -143,6 +145,7 @@ const GridView = () => {
 
     return (
         <AgGridReact
+            style={{ width: '100%', height: '100%' }}
             className="ag-theme-alpine-dark"
             theme="legacy"
             columnDefs={colDefs}
