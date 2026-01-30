@@ -13,11 +13,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/banquet/sqlite"
-	"github.com/darianmavgo/mksqlite/converters/filesystem"
 	_ "modernc.org/sqlite"
 )
 
@@ -134,58 +132,43 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
-	abs, _ := filepath.Abs(s.config.ServeFolder)
-	log.Printf("[API] Scanning filesystem using mksqlite converter: %s", abs)
+	dir := r.URL.Query().Get("dir")
+	if strings.Contains(dir, "..") {
+		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
+		return
+	}
+
+	targetDir := filepath.Join(s.config.ServeFolder, dir)
+	abs, _ := filepath.Abs(targetDir)
+	log.Printf("[API] Listing directory: %s", abs)
+
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to read directory: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
 
 	type FileEntry struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
 
-	// Create filesystem converter
-	fsConverter, err := filesystem.NewFilesystemConverter(s.config.ServeFolder)
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Failed to create filesystem converter: %v"}`, err), http.StatusInternalServerError)
-		return
-	}
-
 	var files []FileEntry
-	var mu sync.Mutex
-
-	// Use ScanRows to get all file entries
-	err = fsConverter.ScanRows("tb0", func(row []interface{}, rowErr error) error {
-		if rowErr != nil {
-			log.Printf("[SERVER] Row error: %v", rowErr)
-			return nil // Continue on errors
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
 		}
 
-		// Row format: path, name, size, extension, mod_time, create_time, permissions, is_dir, mime_type
-		if len(row) < 4 {
-			return nil
+		if entry.IsDir() {
+			files = append(files, FileEntry{Name: name, Type: "directory"})
+		} else {
+			// Check extension
+			if strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") ||
+				strings.HasSuffix(name, ".csv.db") || strings.HasSuffix(name, ".xlsx.db") {
+				files = append(files, FileEntry{Name: name, Type: "database"})
+			}
 		}
-
-		path, ok := row[0].(string)
-		if !ok {
-			return nil
-		}
-
-		ext, _ := row[3].(string)
-
-		// Filter for database files only
-		if strings.HasSuffix(ext, ".db") || strings.HasSuffix(ext, ".sqlite") ||
-			strings.HasSuffix(path, ".csv.db") || strings.HasSuffix(path, ".xlsx.db") {
-
-			mu.Lock()
-			files = append(files, FileEntry{Name: path, Type: "database"})
-			mu.Unlock()
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		log.Printf("[SERVER] Filesystem scan error: %v", err)
-		// Don't fail completely, return what we have
 	}
 
 	w.Header().Set("Content-Type", "application/json")

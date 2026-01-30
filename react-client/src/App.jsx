@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { BrowserRouter, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom';
@@ -11,15 +11,15 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 // No wrapper container needed, using absolute/flex layout on root components
 
 
-const FileList = () => {
+const FileBrowser = ({ path }) => {
   const [rowData, setRowData] = useState([]);
 
   useEffect(() => {
-    document.title = 'sqliter';
-  }, []);
+    document.title = path || 'sqliter';
+  }, [path]);
   
   useEffect(() => {
-    fetch('/sqliter/fs')
+    fetch(`/sqliter/fs?dir=${path || ''}`)
       .then(r => r.json())
       .then(d => {
         if (Array.isArray(d)) {
@@ -33,19 +33,22 @@ const FileList = () => {
         console.error("Fetch error:", err);
         setRowData([]);
       });
-  }, []);
+  }, [path]);
 
-  const [colDefs] = useState([
+  const colDefs = useMemo(() => [
     { 
         field: "name", 
-        headerName: "Database Name", 
+        headerName: "Name",
         flex: 1,
         cellRenderer: (params) => {
-            return params.value ? <Link to={`/${params.value}`} style={{color: '#61dafb'}}>{params.value}</Link> : null;
+            const val = params.value;
+            if (!val) return null;
+            const fullPath = path ? `${path}/${val}` : val;
+            return <Link to={`/${fullPath}`} style={{color: '#61dafb'}}>{val}</Link>;
         }
     },
     { field: "type", width: 150 }
-  ]);
+  ], [path]);
 
   return (
       <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
@@ -62,8 +65,7 @@ const FileList = () => {
   );
 };
 
-const TableList = () => {
-    const { db } = useParams();
+const TableList = ({ db }) => {
     const [tables, setTables] = useState([]);
     const navigate = useNavigate();
 
@@ -89,7 +91,7 @@ const TableList = () => {
             });
     }, [db, navigate]);
 
-    const [colDefs] = useState([
+    const colDefs = useMemo(() => [
         { 
             field: "name", 
             headerName: "Table Name", 
@@ -99,7 +101,7 @@ const TableList = () => {
             }
         },
         { field: "type", width: 150 }
-    ]);
+    ], [db]);
 
     return (
         <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
@@ -116,12 +118,7 @@ const TableList = () => {
     );
 }
 
-const GridView = () => {
-    const params = useParams();
-    const db = params.db;
-    const table = params.table;
-    const rest = params["*"];
-
+const GridView = ({ db, table, rest }) => {
     const [colDefs, setColDefs] = useState([]);
 
     useEffect(() => {
@@ -200,14 +197,40 @@ const GridView = () => {
     );
 };
 
+const MainRouter = () => {
+    const params = useParams();
+    const splat = params["*"] || "";
+
+    // Logic to determine what to show
+    // We look for a database extension in the path to split DB path from table path.
+    // Extensions: .db, .sqlite, .csv.db, .xlsx.db
+    const dbMatch = splat.match(/(.*?\.(?:db|sqlite|csv\.db|xlsx\.db))(?:\/|$)(.*)/);
+
+    if (dbMatch) {
+        const dbPath = dbMatch[1];
+        const restPath = dbMatch[2];
+
+        if (!restPath) {
+            // It's just the DB, list tables
+            return <TableList db={dbPath} />;
+        } else {
+             // It's inside a DB
+             const parts = restPath.split('/');
+             const table = parts[0];
+             const rest = parts.slice(1).join('/');
+             return <GridView db={dbPath} table={table} rest={rest} />;
+        }
+    } else {
+        // It's a directory
+        return <FileBrowser path={splat} />;
+    }
+}
 
 const App = () => {
   return (
     <BrowserRouter>
         <Routes>
-            <Route path="/" element={<FileList />} />
-            <Route path="/:db" element={<TableList />} />
-            <Route path="/:db/:table/*" element={<GridView />} />
+            <Route path="/*" element={<MainRouter />} />
         </Routes>
     </BrowserRouter>
   );
