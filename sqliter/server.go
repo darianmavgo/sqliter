@@ -14,11 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/banquet/sqlite"
+	"github.com/darianmavgo/mksqlite/converters/filesystem"
 	_ "modernc.org/sqlite"
 )
 
@@ -136,96 +135,57 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 	abs, _ := filepath.Abs(s.config.ServeFolder)
-	log.Printf("[API] Recursive scan (8 parallel workers, 10s timeout): %s", abs)
+	log.Printf("[API] Scanning filesystem using mksqlite converter: %s", abs)
 
 	type FileEntry struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
 
-	queue := make(chan string, 100000)
-	resultsChan := make(chan string, 10000)
-	sem := make(chan struct{}, 8)
-	var pending int32
-
-	addWork := func(path string) {
-		atomic.AddInt32(&pending, 1)
-		select {
-		case queue <- path:
-		default:
-			atomic.AddInt32(&pending, -1)
-			log.Printf("[SERVER] Queue full, skipping directory: %s", path)
-		}
+	// Create filesystem converter
+	fsConverter, err := filesystem.NewFilesystemConverter(s.config.ServeFolder)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "Failed to create filesystem converter: %v"}`, err), http.StatusInternalServerError)
+		return
 	}
 
-	addWork(s.config.ServeFolder)
-
-	// Monitor pending count to close queue
-	go func() {
-		for {
-			if atomic.LoadInt32(&pending) == 0 {
-				close(queue)
-				return
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-	}()
-
-	var walkWG sync.WaitGroup
-
-	// Manager routine to launch workers
-	go func() {
-		for dir := range queue {
-			sem <- struct{}{} // Acquire worker slot
-			walkWG.Add(1)
-			go func(d string) {
-				defer walkWG.Done()
-
-				// Channel to signal internal scan completion
-				done := make(chan bool, 1)
-
-				go func() {
-					entries, err := os.ReadDir(d)
-					if err == nil {
-						for _, entry := range entries {
-							fullPath := filepath.Join(d, entry.Name())
-							if entry.IsDir() {
-								// Skip hidden directories to avoid infinite recursion or sensitive areas
-								if !strings.HasPrefix(entry.Name(), ".") {
-									addWork(fullPath)
-								}
-							} else {
-								name := entry.Name()
-								if strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") ||
-									strings.HasSuffix(name, ".csv.db") || strings.HasSuffix(name, ".xlsx.db") {
-									rel, err := filepath.Rel(s.config.ServeFolder, fullPath)
-									if err == nil {
-										resultsChan <- rel
-									}
-								}
-							}
-						}
-					}
-					done <- true
-				}()
-
-				select {
-				case <-done:
-					<-sem // Release normal slot
-				case <-time.After(10 * time.Second):
-					log.Printf("[SERVER] Worker stalled > 10s on %s - releasing slot to move on", d)
-					<-sem // Release slot so another worker can start
-				}
-				atomic.AddInt32(&pending, -1)
-			}(dir)
-		}
-		walkWG.Wait()
-		close(resultsChan)
-	}()
-
 	var files []FileEntry
-	for res := range resultsChan {
-		files = append(files, FileEntry{Name: res, Type: "database"})
+	var mu sync.Mutex
+
+	// Use ScanRows to get all file entries
+	err = fsConverter.ScanRows("tb0", func(row []interface{}, rowErr error) error {
+		if rowErr != nil {
+			log.Printf("[SERVER] Row error: %v", rowErr)
+			return nil // Continue on errors
+		}
+
+		// Row format: path, name, size, extension, mod_time, create_time, permissions, is_dir, mime_type
+		if len(row) < 4 {
+			return nil
+		}
+
+		path, ok := row[0].(string)
+		if !ok {
+			return nil
+		}
+
+		ext, _ := row[3].(string)
+
+		// Filter for database files only
+		if strings.HasSuffix(ext, ".db") || strings.HasSuffix(ext, ".sqlite") ||
+			strings.HasSuffix(path, ".csv.db") || strings.HasSuffix(path, ".xlsx.db") {
+
+			mu.Lock()
+			files = append(files, FileEntry{Name: path, Type: "database"})
+			mu.Unlock()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("[SERVER] Filesystem scan error: %v", err)
+		// Don't fail completely, return what we have
 	}
 
 	w.Header().Set("Content-Type", "application/json")
