@@ -13,6 +13,10 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 
 const FileList = () => {
   const [rowData, setRowData] = useState([]);
+
+  useEffect(() => {
+    document.title = 'sqliter';
+  }, []);
   
   useEffect(() => {
     fetch('/sqliter/fs')
@@ -50,6 +54,12 @@ const TableList = () => {
     const { db } = useParams();
     const [tables, setTables] = useState([]);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (db) {
+            document.title = db;
+        }
+    }, [db]);
 
     useEffect(() => {
         fetch(`/sqliter/tables?db=${db}`)
@@ -96,6 +106,13 @@ const TableList = () => {
 const GridView = () => {
     const { db, table } = useParams();
     const [colDefs, setColDefs] = useState([]);
+
+    useEffect(() => {
+        if (db && table) {
+            const title = `${db}/${table}`;
+            document.title = title.length > 80 ? title.substring(title.length - 80) : title;
+        }
+    }, [db, table]);
 
     useEffect(() => {
          const path = `/${db}/${table}`;
