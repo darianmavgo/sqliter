@@ -15,12 +15,16 @@ import (
 )
 
 func main() {
+	var arg string
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: sqliter [file-path-or-url]")
-		os.Exit(1)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("Failed to get user home dir: %v", err)
+		}
+		arg = home
+	} else {
+		arg = os.Args[1]
 	}
-
-	arg := os.Args[1]
 	var dataDir string
 	var fileName string
 

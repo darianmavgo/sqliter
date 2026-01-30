@@ -121,7 +121,6 @@ const GridView = () => {
     }, [db, table]);
 
     useEffect(() => {
-         const path = `/${db}/${table}`;
          let path = `/${db}/${table}`;
          if (rest) {
              path += `/${rest}`;
