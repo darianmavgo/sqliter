@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/darianmavgo/sqliter/server"
 	"github.com/darianmavgo/sqliter/sqliter"
 )
 
@@ -112,15 +111,10 @@ func main() {
 	listener.Close() // Release it so server can bind
 
 	cfg := sqliter.DefaultConfig()
-	cfg.DataDir = dataDir
 	cfg.ServeFolder = dataDir
-	cfg.Port = fmt.Sprintf("%d", port)
 	cfg.Verbose = true
 
-	// In memory mode or standard server?
-	// The existing server implementation reads from disk via DataDir
-
-	srv := server.NewServer(cfg)
+	srv := sqliter.NewServer(cfg)
 
 	url := fmt.Sprintf("http://[::1]:%d", port)
 	if fileName != "" {
@@ -139,16 +133,6 @@ func main() {
 
 	// Main table viewer routes
 	mux.Handle("/", srv)
-
-	// WASM asset routes
-	if cfg.EnableWASM {
-		mux.HandleFunc("/sqliter.wasm", srv.ServeWASMBinary)
-		mux.HandleFunc("/api/db/", srv.ServeDatabaseFile)
-
-		// Serve wasm_exec.js from templates
-		templatesDir := "sqliter/templates"
-		mux.Handle("/wasm_exec.js", http.StripPrefix("/", http.FileServer(http.Dir(templatesDir))))
-	}
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("[::]:%d", port), mux))
 }
