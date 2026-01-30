@@ -271,7 +271,7 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 
-	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000;"); err != nil {
+	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
 		s.logError("Error setting PRAGMAs: %v", err)
 	}
 
