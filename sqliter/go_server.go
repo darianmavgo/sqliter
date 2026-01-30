@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/darianmavgo/banquet"
+	"github.com/darianmavgo/banquet/sqlite"
 	_ "modernc.org/sqlite"
 )
 
@@ -376,7 +377,7 @@ func handleBanquetOld(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Build Sql
-	query := ConstructSQL(b)
+	query := sqlite.Compose(b)
 
 	// 6. Execute
 	rows, err := db.Query(query)
@@ -420,7 +421,7 @@ func handleBanquetOld(w http.ResponseWriter, r *http.Request) {
 	// Count is tricky with filters. For now, separate count query if feasible, or just return what we have.
 	total := 0
 	if b.Where == "" {
-		db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", QuoteIdentifier(b.Table))).Scan(&total)
+		db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", sqlite.QuoteIdentifier(b.Table))).Scan(&total)
 	}
 
 	resp := OldResponse{

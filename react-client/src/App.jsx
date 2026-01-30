@@ -8,11 +8,8 @@ import './index.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const Container = ({ children }) => (
-  <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e', color: '#e0e0e0' }}>
-    {children}
-  </div>
-);
+// No wrapper container needed, using absolute/flex layout on root components
+
 
 const FileList = () => {
   const [rowData, setRowData] = useState([]);
@@ -36,16 +33,15 @@ const FileList = () => {
   ]);
 
   return (
-      <div className="ag-theme-alpine-dark" style={{ width: '100%', height: '100%' }}>
-          <AgGridReact
-              theme="legacy"
-              rowData={rowData}
-              columnDefs={colDefs}
-              defaultColDef={{sortable: true, filter: true, resizable: true}}
-              rowHeight={32}
-              headerHeight={32}
-          />
-      </div>
+      <AgGridReact
+          className="ag-theme-alpine-dark"
+          theme="legacy"
+          rowData={rowData}
+          columnDefs={colDefs}
+          defaultColDef={{sortable: true, filter: true, resizable: true}}
+          rowHeight={32}
+          headerHeight={32}
+      />
   );
 };
 
@@ -62,33 +58,44 @@ const TableList = () => {
                     alert(data.error);
                     return;
                 }
-                setTables(data || []);
+                const list = data.tables || [];
+                setTables(list);
+                if (data.autoRedirectSingleTable && list.length === 1) {
+                    navigate(`/${db}/${list[0].name}`, { replace: true });
+                }
             });
-    }, [db]);
+    }, [db, navigate]);
+
+    const [colDefs] = useState([
+        { 
+            field: "name", 
+            headerName: "Table Name", 
+            flex: 1,
+            cellRenderer: (params) => {
+                return params.value ? <Link to={`/${db}/${params.value}`} style={{color: '#61dafb'}}>{params.value}</Link> : null;
+            }
+        },
+        { field: "type", width: 150 }
+    ]);
 
     return (
-        <div style={{ padding: '20px' }}>
-          <h1>Tables in {db}</h1>
-          <Link to="/" style={{color: '#888', marginBottom: '10px', display: 'block'}}>← Back</Link>
-          <ul>
-            {tables.map(t => (
-               <li key={t.name}>
-                 <Link to={`/${db}/${t.name}`} style={{color: '#61dafb'}}>{t.name}</Link> <span style={{color: '#666'}}>({t.type})</span>
-               </li>
-            ))}
-          </ul>
-        </div>
-    )
+        <AgGridReact
+            className="ag-theme-alpine-dark"
+            theme="legacy"
+            rowData={tables}
+            columnDefs={colDefs}
+            defaultColDef={{sortable: true, filter: true, resizable: true}}
+            rowHeight={32}
+            headerHeight={32}
+        />
+    );
 }
 
 const GridView = () => {
     const { db, table } = useParams();
     const [colDefs, setColDefs] = useState([]);
-    const [sqlDebug, setSqlDebug] = useState("");
 
-    // Fetch simple metadata/columns first
     useEffect(() => {
-         // We fetch a 0-row result to get columns
          const path = `/${db}/${table}`;
          fetch(`/sqliter/rows?path=${path}&start=0&end=0`)
             .then(r => r.json())
@@ -99,9 +106,6 @@ const GridView = () => {
                 }
                 if (data.columns) {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
-                }
-                if (data.sql) {
-                    setSqlDebug(data.sql);
                 }
             });
     }, [db, table]);
@@ -126,7 +130,6 @@ const GridView = () => {
                              wsParams.failCallback();
                              return;
                          }
-                         setSqlDebug(data.sql); // Update debug SQL
                          wsParams.successCallback(data.rows, data.totalCount);
                     })
                     .catch(err => {
@@ -139,25 +142,17 @@ const GridView = () => {
     }, [db, table]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '10px', borderBottom: '1px solid #333', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <Link to={`/${db}`} style={{color: '#888'}}>← Back</Link>
-                <span>{db} / <b>{table}</b></span>
-                <span style={{marginLeft: 'auto', fontSize: '10px', color: '#555', fontFamily: 'monospace'}}>{sqlDebug}</span>
-            </div>
-            <div className="ag-theme-alpine-dark" style={{ flex: 1, width: '100%' }}>
-                <AgGridReact
-                    theme="legacy"
-                    columnDefs={colDefs}
-                    rowModelType={'infinite'}
-                    onGridReady={onGridReady}
-                    cacheBlockSize={100}
-                    maxBlocksInCache={10}
-                    rowHeight={32}
-                    headerHeight={32}
-                />
-            </div>
-        </div>
+        <AgGridReact
+            className="ag-theme-alpine-dark"
+            theme="legacy"
+            columnDefs={colDefs}
+            rowModelType={'infinite'}
+            onGridReady={onGridReady}
+            cacheBlockSize={100}
+            maxBlocksInCache={10}
+            rowHeight={32}
+            headerHeight={32}
+        />
     );
 };
 
@@ -165,13 +160,11 @@ const GridView = () => {
 const App = () => {
   return (
     <BrowserRouter>
-        <Container>
-            <Routes>
-                <Route path="/" element={<FileList />} />
-                <Route path="/:db" element={<TableList />} />
-                <Route path="/:db/:table" element={<GridView />} />
-            </Routes>
-        </Container>
+        <Routes>
+            <Route path="/" element={<FileList />} />
+            <Route path="/:db" element={<TableList />} />
+            <Route path="/:db/:table" element={<GridView />} />
+        </Routes>
     </BrowserRouter>
   );
 };

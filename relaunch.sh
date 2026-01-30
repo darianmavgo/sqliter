@@ -14,11 +14,10 @@ cd ..
 
 # 3. Build & Run Go Server
 echo "Building and starting Go server..."
-cd go-server
-go build -o aggrid-backend main.go
+CGO_ENABLED=0 go build -o bin/sqliter ./cmd/sqliter
 
 # Start in background
-./aggrid-backend > server.log 2>&1 &
+./bin/sqliter sample_data > server.log 2>&1 &
 SERVER_PID=$!
 
 echo "Server running with PID $SERVER_PID"

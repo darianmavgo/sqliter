@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/darianmavgo/banquet"
+	"github.com/darianmavgo/banquet/sqlite"
 	_ "modernc.org/sqlite"
 )
 
@@ -37,6 +38,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/sqliter/") {
 		s.handleAPI(w, r)
 		return
+	}
+
+	if r.URL.Path == "/" || r.URL.Path == "" {
+		abs, _ := filepath.Abs(s.config.ServeFolder)
+		log.Printf("[SERVER] Root accessed. Serving data from: %s", abs)
 	}
 
 	// 2. Serve Static Assets (React App)
@@ -126,6 +132,8 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
+	abs, _ := filepath.Abs(s.config.ServeFolder)
+	log.Printf("[API] Listing files from: %s", abs)
 	entries, err := os.ReadDir(s.config.ServeFolder)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error": "%v"}`, err), http.StatusInternalServerError)
@@ -186,7 +194,16 @@ func (s *Server) apiListTables(w http.ResponseWriter, r *http.Request) {
 		}
 		tables = append(tables, TableInfo{Name: name, Type: type_})
 	}
-	json.NewEncoder(w).Encode(tables)
+
+	type TableListResponse struct {
+		Tables                  []TableInfo `json:"tables"`
+		AutoRedirectSingleTable bool        `json:"autoRedirectSingleTable"`
+	}
+
+	json.NewEncoder(w).Encode(TableListResponse{
+		Tables:                  tables,
+		AutoRedirectSingleTable: s.config.AutoRedirectSingleTable,
+	})
 }
 
 func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
@@ -258,11 +275,11 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		s.logError("Error setting PRAGMAs: %v", err)
 	}
 
-	query := ConstructSQL(bq)
+	query := sqlite.Compose(bq)
 
 	// Get total count for pagination (optional, but good for AgGrid infinite model)
 	// We'll do a separate count query
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", bq.Table)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", sqlite.QuoteIdentifier(bq.Table))
 	if bq.Where != "" {
 		countQuery += " WHERE " + bq.Where
 	}

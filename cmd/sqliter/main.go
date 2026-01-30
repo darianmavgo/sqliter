@@ -124,6 +124,7 @@ func main() {
 	fmt.Printf("Launching sqliter view...\n")
 	fmt.Printf("Data Directory: %s\n", dataDir)
 	fmt.Printf("Listening at: %s\n", url)
+	fmt.Printf("SERVING_AT=%s\n", url)
 
 	// Attempt to open browser (best effort)
 	openBrowser(url)

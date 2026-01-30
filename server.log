@@ -1,0 +1,12 @@
+Launching sqliter view...
+Data Directory: /Users/darianhickman/Documents/sqliter/sample_data
+Listening at: http://[::1]:58633
+SERVING_AT=http://[::1]:58633
+2026/01/30 13:20:46 [SERVER] Root accessed. Serving data from: /Users/darianhickman/Documents/sqliter/sample_data
+2026/01/30 13:20:46 [CLIENT] [INFO] Client Logger Initialized
+2026/01/30 13:20:46 [CLIENT] [INFO] Logger initialized from Main.jsx
+2026/01/30 13:20:46 [API] Listing files from: /Users/darianhickman/Documents/sqliter/sample_data
+2026/01/30 13:20:47 [SERVER] Root accessed. Serving data from: /Users/darianhickman/Documents/sqliter/sample_data
+2026/01/30 13:20:47 [CLIENT] [INFO] Client Logger Initialized
+2026/01/30 13:20:47 [CLIENT] [INFO] Logger initialized from Main.jsx
+2026/01/30 13:20:47 [API] Listing files from: /Users/darianhickman/Documents/sqliter/sample_data
