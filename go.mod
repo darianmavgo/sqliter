@@ -1,11 +1,13 @@
 module github.com/darianmavgo/sqliter
 
-go 1.24.3
+go 1.25.0
 
 require (
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
 	github.com/chromedp/chromedp v0.14.2
 	github.com/darianmavgo/banquet v1.1.0
+	github.com/darianmavgo/mksqlite v1.3.0
+	github.com/magefile/mage v1.15.0
 	modernc.org/sqlite v1.44.2
 )
 
@@ -18,7 +20,6 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
-	github.com/google/pprof v0.0.0-20251007162407-5df77e3f7d1d // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

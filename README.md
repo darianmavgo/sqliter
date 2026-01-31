@@ -1,36 +1,93 @@
-# Ag-Grid Client with SQLite Streaming
+# Sqliter - SQLite Database Viewer
 
-This project implements an Ag-Grid client that streams data from a large SQLite database without locking the UI.
-
-## Architecture
-
-- **Server (`go-server`)**: A lightweight Go server using `modernc.org/sqlite` (no CGO) to serve rows from `Index.sqlite` via a simple REST API. It handles pagination and sorting.
-- **Client (`react-client`)**: A React application using `ag-grid-react` and `ag-grid-community` (v32+). It uses the Infinite Row Model to fetch data in chunks as the user scrolls, ensuring high performance even with large datasets.
+A fast, web-based SQLite database viewer with AG Grid for high-performance data exploration.
 
 ## Features
 
-1. **Sticky Headers**: Native Ag-Grid support properly configured.
-2. **Tight Column Sizing**: optimized `rowHeight` and `headerHeight` and tight column definitions.
-3. **Column Sort**: Server-side sorting implemented for all columns.
-4. **Streaming Data**: Uses Infinite Row Model to lazy-load data.
+- 🚀 **Fast Streaming**: Lazy-loads data using AG Grid's Infinite Row Model
+- 📊 **Full-Screen Grid**: Clean, distraction-free interface
+- 🔍 **Smart Filtering**: Column filters and sorting
+- 📁 **Directory Scanning**: Recursively finds all `.db` and `.sqlite` files
+- 🌐 **Banquet URL Support**: Parse and query using Banquet URL syntax
+- ⚡ **No CGO**: Pure Go SQLite implementation using `modernc.org/sqlite`
 
-## How to Run
+## Quick Start
 
-### 1. Start the Data Server
+### Installation
+
 ```bash
-cd go-server
-go run main.go
-# Server listens on http://localhost:8080/rows
+# Install Mage (build tool)
+go install github.com/magefile/mage@latest
+
+# Install sqliter
+mage install
 ```
 
-### 2. Start the Client
+### Usage
+
 ```bash
-cd react-client
-npm install
-npm run dev
-# Client listens on http://localhost:5173
+# View a database
+sqliter path/to/database.db
+
+# View a directory (recursively finds all .db files)
+sqliter ~/Documents
+
+# No arguments defaults to home directory
+sqliter
 ```
 
-## Troubleshooting
-- If you see "No AG Grid modules are registered", ensure `ModuleRegistry.registerModules([AllCommunityModule])` is called in `App.jsx`.
-- If data doesn't load, check that the Go server is running and `Index.sqlite` is accessible.
+The server will automatically open in your browser at `http://[::1]:PORT`.
+
+## Building from Source
+
+See [docs/BUILD.md](docs/BUILD.md) for detailed build instructions.
+
+Quick build:
+```bash
+mage build
+```
+
+## Development
+
+```bash
+# Run in development mode
+mage dev
+
+# Clean and rebuild
+mage clean build
+
+# Run tests
+mage test
+```
+
+## Architecture
+
+- **Backend**: Go server with embedded React UI
+  - `modernc.org/sqlite` for CGO-free SQLite access
+  - `banquet` for URL-based query parsing
+  - `mksqlite/converters/filesystem` for directory scanning
+  
+- **Frontend**: React with AG Grid
+  - Infinite Row Model for streaming large datasets
+  - Full-screen grid interface
+  - Client-side filtering and sorting
+
+## Project Structure
+
+```
+sqliter/
+├── cmd/sqliter/         # Main application
+├── sqliter/             # Server implementation
+├── react-client/        # React UI source
+├── docs/                # Documentation
+└── magefile.go          # Build automation
+```
+
+## Documentation
+
+- [Build Guide](docs/BUILD.md) - Build, install, and development commands
+- [API Documentation](docs/API.md) - REST API reference (if exists)
+
+## License
+
+See LICENSE file for details.
