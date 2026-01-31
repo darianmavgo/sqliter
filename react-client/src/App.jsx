@@ -87,6 +87,7 @@ const FileBrowser = ({ path }) => {
 
 const TableList = ({ db }) => {
     const [tables, setTables] = useState([]);
+    const [activeTable, setActiveTable] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -96,6 +97,9 @@ const TableList = ({ db }) => {
     }, [db]);
 
     useEffect(() => {
+        // Reset active table when DB changes
+        setActiveTable(null);
+        
         fetch(getApiUrl('/sqliter/tables', { db }))
             .then(r => r.json())
             .then(data => {
@@ -105,9 +109,13 @@ const TableList = ({ db }) => {
                 }
                 const list = data.tables || [];
                 setTables(list);
-                if (data.autoRedirectSingleTable && list.length === 1) {
-                    navigate(`/${db}/${list[0].name}`, { replace: true });
-                }
+                
+                // If there is exactly one table, show it directly without changing URL
+                if (list.length === 1) {
+                    setActiveTable(list[0].name);
+                } 
+                // Alternatively, if the config says autoRedirect, we could still respect that, 
+                // but the user usage implies we prefer this inline rendering for single tables now.
             });
     }, [db, navigate]);
 
@@ -122,6 +130,10 @@ const TableList = ({ db }) => {
         },
         { field: "type", width: 150 }
     ], [db]);
+
+    if (activeTable) {
+        return <GridView db={db} table={activeTable} rest="" />;
+    }
 
     return (
         <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
