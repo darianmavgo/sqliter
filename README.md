@@ -1,93 +1,101 @@
-# Sqliter - SQLite Database Viewer
+# SQLiter
 
-A fast, web-based SQLite database viewer with AG Grid for high-performance data exploration.
+**SQLiter** is a lightweight, high-performance SQLite database viewer and editor. It combines a robust Go server with a modern React frontend (using Ag-Grid) to provide a seamless data browsing experience.
 
-## Features
+## ✨ Features
 
-- 🚀 **Fast Streaming**: Lazy-loads data using AG Grid's Infinite Row Model
-- 📊 **Full-Screen Grid**: Clean, distraction-free interface
-- 🔍 **Smart Filtering**: Column filters and sorting
-- 📁 **Directory Scanning**: Recursively finds all `.db` and `.sqlite` files
-- 🌐 **Banquet URL Support**: Parse and query using Banquet URL syntax
-- ⚡ **No CGO**: Pure Go SQLite implementation using `modernc.org/sqlite`
+- **🚀 Streaming Performance**: Uses Ag-Grid's Infinite Row Model to handle large datasets efficiently without loading everything into memory.
+- **📦 Single Binary**: The React frontend is embedded into the Go binary, making deployment as simple as copying a single executable.
+- **🛠️ CRUD Operations**: Create, update, and delete rows directly from the interface.
+- **🔗 Deep Linking**: Every view (database, table, query) is URL-addressable, making it easy to share specific data views.
+- **📂 Flexible Input**: Open local files, browse directories, or stream databases directly from a URL.
+- **⚡ Zero Configuration**: Just run the binary and point it to your data.
+- **🔍 Advanced Querying**: Supports complex filtering and sorting via URL parameters (powered by [Banquet](https://github.com/darianmavgo/banquet)).
 
-## Quick Start
+## 📦 Installation
 
-### Installation
-
-```bash
-# Install Mage (build tool)
-go install github.com/magefile/mage@latest
-
-# Install sqliter
-mage install
-```
-
-### Usage
+### Using Go Install
+If you have Go installed, you can install the latest version directly:
 
 ```bash
-# View a database
-sqliter path/to/database.db
-
-# View a directory (recursively finds all .db files)
-sqliter ~/Documents
-
-# No arguments defaults to home directory
-sqliter
+go install github.com/darianmavgo/sqliter/cmd/sqliter@latest
 ```
 
-The server will automatically open in your browser at `http://[::1]:PORT`.
+### Building from Source
 
-## Building from Source
+1.  **Prerequisites**:
+    *   Go 1.24+
+    *   Node.js & npm (for building the frontend)
 
-See [docs/BUILD.md](docs/BUILD.md) for detailed build instructions.
+2.  **Clone and Build**:
+    ```bash
+    git clone https://github.com/darianmavgo/sqliter.git
+    cd sqliter
+    ./react_go_build.sh
+    ```
+    This script builds the React client, embeds it into the Go server, and produces a binary in `bin/sqliter`.
 
-Quick build:
+## 🚀 Usage
+
+Run `sqliter` with a file, directory, or URL:
+
+### Open a Local Database
 ```bash
-mage build
+sqliter my_database.db
 ```
 
-## Development
-
+### Browse a Directory
 ```bash
-# Run in development mode
-mage dev
-
-# Clean and rebuild
-mage clean build
-
-# Run tests
-mage test
+sqliter ~/Documents/databases
 ```
 
-## Architecture
-
-- **Backend**: Go server with embedded React UI
-  - `modernc.org/sqlite` for CGO-free SQLite access
-  - `banquet` for URL-based query parsing
-  - `mksqlite/converters/filesystem` for directory scanning
-  
-- **Frontend**: React with AG Grid
-  - Infinite Row Model for streaming large datasets
-  - Full-screen grid interface
-  - Client-side filtering and sorting
-
-## Project Structure
-
-```
-sqliter/
-├── cmd/sqliter/         # Main application
-├── sqliter/             # Server implementation
-├── react-client/        # React UI source
-├── docs/                # Documentation
-└── magefile.go          # Build automation
+### Open a Remote Database
+```bash
+sqliter https://example.com/datasets/large_data.sqlite
 ```
 
-## Documentation
+The application will automatically find an available port, start the server, and open your default browser.
 
-- [Build Guide](docs/BUILD.md) - Build, install, and development commands
-- [API Documentation](docs/API.md) - REST API reference (if exists)
+## 🛠️ Development
 
-## License
+The project consists of two main parts:
+1.  **Backend (`/sqliter`, `/cmd`)**: A Go HTTP server using `modernc.org/sqlite` (CGO-free).
+2.  **Frontend (`/react-client`)**: A React application using Vite and Ag-Grid.
 
-See LICENSE file for details.
+### Running in Development Mode
+
+To work on the frontend with hot-reload:
+
+1.  **Start the Go Server** (serving data):
+    ```bash
+    go run cmd/sqliter/main.go sample_data/
+    ```
+    *Note the port it starts on (e.g., 8080).*
+
+2.  **Start the React Client**:
+    ```bash
+    cd react-client
+    npm install
+    npm run dev
+    ```
+    *Open the Vite URL (e.g., http://localhost:5173).*
+
+    *Note: You may need to configure the React app to proxy requests to the Go server port if not automatically handled.*
+
+### Building the Release
+
+Use the provided script to build the full distribution:
+```bash
+./react_go_build.sh
+```
+
+## 🏗️ Architecture
+
+-   **Server**: Go (Standard Library + `modernc.org/sqlite` + `banquet` for query parsing).
+-   **Client**: React + Ag-Grid Community + Vite.
+-   **Communication**: REST API (`/sqliter/...`) serving JSON.
+-   **Embedding**: `go:embed` is used to bundle the compiled React assets (`dist/`) into the Go binary.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
