@@ -13,6 +13,10 @@ type Config struct {
 	Verbose bool `hcl:"verbose,optional"`
 
 	LogDir string `hcl:"log_dir,optional"`
+
+	// BaseURL is the prefix where the app is mounted (e.g. "/tools/sqliter").
+	// This is used to inject configuration into the React client.
+	BaseURL string `hcl:"base_url,optional"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -22,5 +26,6 @@ func DefaultConfig() *Config {
 		ServeFolder:             "sample_data",
 		Verbose:                 false,
 		LogDir:                  "logs",
+		BaseURL:                 "",
 	}
 }

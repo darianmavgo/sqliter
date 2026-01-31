@@ -8,8 +8,28 @@ import './index.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// No wrapper container needed, using absolute/flex layout on root components
-
+// Helper to resolve API URLs based on global config
+const getApiUrl = (endpoint, params = {}) => {
+    const config = window.SQLITER_CONFIG || {};
+    // Base path logic:
+    // If we are mounted at /tools/sqliter, the API is at /tools/sqliter/sqliter/...
+    // Wait, the Go server handles /sqliter/ prefix logic.
+    // Ideally if mounted at /tools/sqliter, requests should go to /tools/sqliter/sqliter/fs...
+    // The basePath should be the mount point.
+    
+    let base = config.basePath || '';
+    if (base.endsWith('/')) base = base.slice(0, -1);
+    // Endpoint usually starts with /
+    
+    // Construct Query String
+    const url = new URL(window.location.origin + base + endpoint);
+    Object.keys(params).forEach(key => {
+        if (params[key] !== undefined && params[key] !== null) {
+            url.searchParams.append(key, params[key]);
+        }
+    });
+    return url.toString().replace(window.location.origin, ''); // Return relative path
+};
 
 const FileBrowser = ({ path }) => {
   const [rowData, setRowData] = useState([]);
@@ -19,7 +39,7 @@ const FileBrowser = ({ path }) => {
   }, [path]);
   
   useEffect(() => {
-    fetch(`/sqliter/fs?dir=${path || ''}`)
+    fetch(getApiUrl('/sqliter/fs', { dir: path || '' }))
       .then(r => r.json())
       .then(d => {
         if (Array.isArray(d)) {
@@ -76,7 +96,7 @@ const TableList = ({ db }) => {
     }, [db]);
 
     useEffect(() => {
-        fetch(`/sqliter/tables?db=${db}`)
+        fetch(getApiUrl('/sqliter/tables', { db }))
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
@@ -133,7 +153,7 @@ const GridView = ({ db, table, rest }) => {
          if (rest) {
              path += `/${rest}`;
          }
-         fetch(`/sqliter/rows?path=${path}&start=0&end=0`)
+         fetch(getApiUrl('/sqliter/rows', { path, start: 0, end: 0 }))
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
@@ -155,14 +175,20 @@ const GridView = ({ db, table, rest }) => {
                 if (rest) {
                     path += `/${rest}`;
                 }
-                let url = `/sqliter/rows?path=${path}&start=${startRow}&end=${endRow}`;
+                
+                const apiParams = {
+                    path,
+                    start: startRow,
+                    end: endRow
+                };
                 
                 if (sortModel.length > 0) {
                   const { colId, sort } = sortModel[0];
-                  url += `&sortCol=${colId}&sortDir=${sort}`;
+                  apiParams.sortCol = colId;
+                  apiParams.sortDir = sort;
                 }
 
-                fetch(url)
+                fetch(getApiUrl('/sqliter/rows', apiParams))
                     .then(resp => resp.json())
                     .then(data => {
                          if (data.error) {
@@ -227,8 +253,17 @@ const MainRouter = () => {
 }
 
 const App = () => {
+  // Read config injected by server, or default to empty (root)
+  // Config is expected to be: window.SQLITER_CONFIG = { basePath: "/some/prefix" }
+  const config = window.SQLITER_CONFIG || {};
+  const basePath = config.basePath || ''; 
+
+  // Normalize basePath for Router: remove trailing slash if present, ensure leading slash if not empty?
+  // Actually, BrowserRouter 'basename' expects a leading slash (e.g. /app). 
+  // If it's empty, it means root.
+  
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basePath}>
         <Routes>
             <Route path="/*" element={<MainRouter />} />
         </Routes>

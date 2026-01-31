@@ -1,6 +1,7 @@
 package sqliter
 
 import (
+	"bytes"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -60,12 +61,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path = "index.html"
 	}
 
-	// Try to open the file
+	// Check if we are serving index.html (either explicitly or via fallback)
 	f, err := distFS.Open(path)
 	if err == nil {
-		// File exists, serve it
+		// File exists
 		defer f.Close()
 		stat, _ := f.Stat()
+
+		// If it's index.html, we need to inject config
+		if path == "index.html" {
+			s.serveIndexWithConfig(w, r, f, stat)
+			return
+		}
+
 		http.ServeContent(w, r, path, stat.ModTime(), f.(io.ReadSeeker))
 		return
 	}
@@ -79,7 +87,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer index.Close()
 	stat, _ := index.Stat()
-	http.ServeContent(w, r, "index.html", stat.ModTime(), index.(io.ReadSeeker))
+	s.serveIndexWithConfig(w, r, index, stat)
+}
+
+func (s *Server) serveIndexWithConfig(w http.ResponseWriter, r *http.Request, f fs.File, stat fs.FileInfo) {
+	// Read full content
+	content, err := io.ReadAll(f)
+	if err != nil {
+		http.Error(w, "Failed to read index.html", http.StatusInternalServerError)
+		return
+	}
+
+	// Inject Config
+	// Look for <head> to insert script
+	htmlStr := string(content)
+	injection := fmt.Sprintf("<script>window.SQLITER_CONFIG = { basePath: %q };</script>", s.config.BaseURL)
+
+	// Prepend to <head> or <body>, or just append to head if found, else prepend to content
+	if strings.Contains(htmlStr, "<head>") {
+		htmlStr = strings.Replace(htmlStr, "<head>", "<head>"+injection, 1)
+	} else {
+		htmlStr = injection + htmlStr
+	}
+
+	// Verify we haven't messed up encoding (assuming UTF-8 for web)
+	data := []byte(htmlStr)
+
+	// Serve with ModTime from original file to respect some Caching logic,
+	// though Content-Length will change so ServeContent handles that.
+	http.ServeContent(w, r, "index.html", stat.ModTime(), bytes.NewReader(data))
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
