@@ -274,3 +274,108 @@ func All() error {
 	mg.Deps(Fmt, Lint, Test, Build)
 	return nil
 }
+
+// MacApp builds a macOS application bundle
+func MacApp() error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("MacApp target is only supported on macOS")
+	}
+
+	mg.Deps(Build)
+
+	fmt.Println("🍎 Building macOS App Bundle...")
+
+	appName := "Sqliter.app"
+	appPath := filepath.Join("bin", appName)
+
+	// AppleScript content
+	scriptContent := `
+on run
+	set myPath to POSIX path of (path to me)
+	set binPath to myPath & "Contents/Resources/sqliter"
+	do shell script quoted form of binPath & " > /dev/null 2>&1 &"
+end run
+
+on open argv
+	set myPath to POSIX path of (path to me)
+	set binPath to myPath & "Contents/Resources/sqliter"
+	repeat with aFile in argv
+		set filePath to POSIX path of aFile
+		do shell script quoted form of binPath & " " & quoted form of filePath & " > /dev/null 2>&1 &"
+	end repeat
+end open
+`
+	// Create temp script file
+	tmpScript, err := os.CreateTemp("", "sqliter-launcher-*.scpt")
+	if err != nil {
+		return fmt.Errorf("failed to create temp script: %w", err)
+	}
+	defer os.Remove(tmpScript.Name())
+
+	if _, err := tmpScript.WriteString(scriptContent); err != nil {
+		return fmt.Errorf("failed to write script content: %w", err)
+	}
+	tmpScript.Close()
+
+	// Compile AppleScript to App
+	if err := sh.Run("osacompile", "-o", appPath, tmpScript.Name()); err != nil {
+		return fmt.Errorf("osacompile failed: %w", err)
+	}
+
+	// Copy binary to Resources
+	destBin := filepath.Join(appPath, "Contents/Resources", "sqliter")
+	if err := sh.Copy(destBin, "bin/sqliter"); err != nil {
+		return fmt.Errorf("failed to copy binary to app bundle: %w", err)
+	}
+	if err := os.Chmod(destBin, 0755); err != nil {
+		return fmt.Errorf("failed to chmod binary: %w", err)
+	}
+
+	// Update Info.plist
+	infoPlistPath := filepath.Join(appPath, "Contents/Info.plist")
+
+	// Set Bundle Identifier
+	if err := sh.Run("plutil", "-replace", "CFBundleIdentifier", "-string", "com.darianmavgo.sqliter", infoPlistPath); err != nil {
+		return fmt.Errorf("failed to set CFBundleIdentifier: %w", err)
+	}
+
+	// Set Bundle Name
+	if err := sh.Run("plutil", "-replace", "CFBundleName", "-string", "Sqliter", infoPlistPath); err != nil {
+		return fmt.Errorf("failed to set CFBundleName: %w", err)
+	}
+
+	// Add Document Types
+	docTypesXML := `
+<array>
+    <dict>
+        <key>CFBundleTypeName</key>
+        <string>SQLite Database</string>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>LSHandlerRank</key>
+        <string>Owner</string>
+        <key>CFBundleTypeExtensions</key>
+        <array>
+            <string>sqlite</string>
+            <string>db</string>
+            <string>sqlite3</string>
+        </array>
+    </dict>
+</array>
+`
+	if err := sh.Run("plutil", "-insert", "CFBundleDocumentTypes", "-xml", docTypesXML, infoPlistPath); err != nil {
+		// Try replace if insert failed
+		if err := sh.Run("plutil", "-replace", "CFBundleDocumentTypes", "-xml", docTypesXML, infoPlistPath); err != nil {
+			return fmt.Errorf("failed to set CFBundleDocumentTypes: %w", err)
+		}
+	}
+
+	fmt.Printf("✅ Created %s\n", appPath)
+	fmt.Println("To make this the default app for .sqlite files:")
+	fmt.Println("1. Right-click a .sqlite file in Finder.")
+	fmt.Println("2. Select 'Get Info'.")
+	fmt.Println("3. In 'Open with:', select 'Sqliter.app'.")
+	fmt.Println("4. Click 'Change All...'.")
+
+	return nil
+}
