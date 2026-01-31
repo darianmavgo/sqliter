@@ -188,6 +188,10 @@ const GridView = ({ db, table, rest }) => {
                   apiParams.sortDir = sort;
                 }
 
+                if (wsParams.filterModel && Object.keys(wsParams.filterModel).length > 0) {
+                    apiParams.filterModel = JSON.stringify(wsParams.filterModel);
+                }
+
                 fetch(getApiUrl('/sqliter/rows', apiParams))
                     .then(resp => resp.json())
                     .then(data => {
