@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 )
 
@@ -110,8 +109,6 @@ func TestE2EInteractions(t *testing.T) {
 	runErr := make(chan error, 1)
 
 	go func() {
-		var nodes []*cdp.Node
-
 		t.Log("Navigating to home...")
 		if err := chromedp.Run(ctx, chromedp.Navigate(baseURL)); err != nil {
 			runErr <- err
@@ -137,20 +134,35 @@ func TestE2EInteractions(t *testing.T) {
 			t.Logf("No database links found: %v", err)
 		}
 
-		// Check for Drilldown links (Table List)
-		err = chromedp.Run(ctx,
-			chromedp.WaitVisible(`a[href*="/"]`, chromedp.ByQuery),
-			chromedp.Nodes(`a[href*="/"]`, &nodes, chromedp.ByQueryAll),
-		)
+		// Check for Drilldown links (Table List) or if we are already in Grid View
+		// Wait for AgGrid headers to appear
+		if err := chromedp.Run(ctx, chromedp.WaitVisible(".ag-header-cell-text", chromedp.ByQuery)); err != nil {
+			runErr <- err
+			return
+		}
 
-		if len(nodes) > 0 {
-			t.Logf("Found %d links/cells, clicking first candidate...", len(nodes))
-			// Just click the first one found
-			err = chromedp.Run(ctx, chromedp.Click(`a[href*="/"]`, chromedp.ByQuery))
+		// Check if we are in Table List by looking for "Table Name" header
+		var tableListMode bool
+		err = chromedp.Run(ctx,
+			chromedp.Evaluate(`Array.from(document.querySelectorAll('.ag-header-cell-text')).some(el => el.innerText === "Table Name")`, &tableListMode),
+		)
+		if err != nil {
+			t.Logf("Failed to evaluate table mode: %v", err)
+		}
+
+		if tableListMode {
+			t.Log("Detected Table List mode. Clicking table...")
+			err = chromedp.Run(ctx,
+				chromedp.WaitVisible(`a[href*="/"]`, chromedp.ByQuery),
+				chromedp.Click(`a[href*="/"]`, chromedp.ByQuery),
+			)
 			if err != nil {
-				t.Log("Failed to click table link, maybe it's not clickable or already in grid?")
+				runErr <- err
+				return
 			}
 			time.Sleep(2 * time.Second)
+		} else {
+			t.Log("Detected Grid View (auto-redirect?). Skipping table selection.")
 		}
 
 		// Try to sort
