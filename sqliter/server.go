@@ -170,7 +170,7 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
 	if strings.Contains(dir, "..") {
-		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
+		s.writeJSONError(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
@@ -180,7 +180,7 @@ func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Failed to read directory: %v"}`, err), http.StatusInternalServerError)
+		s.writeJSONError(w, fmt.Sprintf("Failed to read directory: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -189,7 +189,7 @@ func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 		Type string `json:"type"`
 	}
 
-	var files []FileEntry
+	files := make([]FileEntry, 0)
 	for _, entry := range entries {
 		name := entry.Name()
 		if strings.HasPrefix(name, ".") {
@@ -440,6 +440,12 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) writeJSONError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func (s *Server) logError(format string, args ...interface{}) {

@@ -33,20 +33,29 @@ const getApiUrl = (endpoint, params = {}) => {
 
 const FileBrowser = ({ path }) => {
   const [rowData, setRowData] = useState([]);
+  const [error, setError] = useState(null);
   
   useEffect(() => {
+    setError(null);
     fetch(getApiUrl('/sqliter/fs', { dir: path || '' }))
       .then(r => r.json())
       .then(d => {
+        if (d && d.error) {
+            setError(d.error);
+            setRowData([]);
+            return;
+        }
         if (Array.isArray(d)) {
           setRowData(d);
         } else {
           console.error("API Error or unexpected response:", d);
+          setError("Unexpected response from server");
           setRowData([]);
         }
       })
       .catch(err => {
         console.error("Fetch error:", err);
+        setError("Network error or server unreachable");
         setRowData([]);
       });
   }, [path]);
@@ -65,6 +74,15 @@ const FileBrowser = ({ path }) => {
     },
     { field: "type", width: 150 }
   ], [path]);
+
+  if (error) {
+      return (
+          <div style={{ padding: '20px', color: '#ff6b6b', background: '#2c3e50', height: '100%' }}>
+              <h3>Error loading files</h3>
+              <p>{error}</p>
+          </div>
+      );
+  }
 
   return (
       <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
