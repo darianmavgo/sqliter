@@ -25,6 +25,17 @@ It acts as the "Face" of the data ecosystem.
 *   **Not a Generic Web Server**: While it includes an HTTP server, it is specialized for serving database content and API endpoints. It is not designed to host general-purpose websites.
 *   **No User Management**: It assumes it is running in a trusted environment or behind a gateway (like `flight3` or PocketBase) that handles auth; it does not implement its own user/role system.
 
+## Installation
+
+### Homebrew
+
+You can install `sqliter` via Homebrew by tapping the repository:
+
+```bash
+brew tap darianmavgo/sqliter
+brew install sqliter
+```
+
 ## Usage
 
 ```bash
