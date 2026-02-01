@@ -349,6 +349,34 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		s.logError("Error setting PRAGMAs: %v", err)
 	}
 
+	// Handle case where table name is missing (e.g. user provided columns in URL but no table)
+	if bq.Table == "" {
+		// Check available tables
+		rows, err := db.Query("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "Failed to list tables: %v"}`, err), http.StatusInternalServerError)
+			return
+		}
+		var tables []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err == nil {
+				tables = append(tables, name)
+			}
+		}
+		rows.Close()
+
+		if len(tables) == 1 {
+			bq.Table = tables[0]
+		} else if len(tables) == 0 {
+			http.Error(w, `{"error": "No tables found in database"}`, http.StatusBadRequest)
+			return
+		} else {
+			http.Error(w, fmt.Sprintf(`{"error": "Table name required. Available tables: %s"}`, strings.Join(tables, ", ")), http.StatusBadRequest)
+			return
+		}
+	}
+
 	query := sqlite.Compose(bq)
 
 	// Get total count for pagination (optional, but good for AgGrid infinite model)
