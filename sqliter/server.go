@@ -314,6 +314,23 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// AgGrid Filter Model
+	filterModel := r.URL.Query().Get("filterModel")
+	if filterModel != "" {
+		filterWhere, err := BuildWhereClause(filterModel)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "Error parsing filter: %v"}`, err), http.StatusBadRequest)
+			return
+		}
+		if filterWhere != "" {
+			if bq.Where != "" {
+				bq.Where = fmt.Sprintf("(%s) AND (%s)", bq.Where, filterWhere)
+			} else {
+				bq.Where = filterWhere
+			}
+		}
+	}
+
 	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
 	if strings.Contains(dataSetPath, "..") {
 		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
