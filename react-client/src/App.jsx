@@ -33,10 +33,6 @@ const getApiUrl = (endpoint, params = {}) => {
 
 const FileBrowser = ({ path }) => {
   const [rowData, setRowData] = useState([]);
-
-  useEffect(() => {
-    document.title = path || 'sqliter';
-  }, [path]);
   
   useEffect(() => {
     fetch(getApiUrl('/sqliter/fs', { dir: path || '' }))
@@ -89,12 +85,6 @@ const TableList = ({ db }) => {
     const [tables, setTables] = useState([]);
     const [activeTable, setActiveTable] = useState(null);
     const navigate = useNavigate();
-
-    useEffect(() => {
-        if (db) {
-            document.title = db;
-        }
-    }, [db]);
 
     useEffect(() => {
         // Reset active table when DB changes
@@ -152,13 +142,6 @@ const TableList = ({ db }) => {
 
 const GridView = ({ db, table, rest }) => {
     const [colDefs, setColDefs] = useState([]);
-
-    useEffect(() => {
-        if (db && table) {
-            const title = `${db}/${table}`;
-            document.title = title.length > 80 ? title.substring(title.length - 80) : title;
-        }
-    }, [db, table]);
 
     useEffect(() => {
          let path = `/${db}/${table}`;
@@ -242,6 +225,11 @@ const GridView = ({ db, table, rest }) => {
 const MainRouter = () => {
     const params = useParams();
     const splat = params["*"] || "";
+
+    useEffect(() => {
+        const title = splat || 'sqliter';
+        document.title = title.length > 80 ? title.substring(title.length - 80) : title;
+    }, [splat]);
 
     // Logic to determine what to show
     // We look for a database extension in the path to split DB path from table path.
