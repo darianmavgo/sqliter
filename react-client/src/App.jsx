@@ -101,7 +101,7 @@ const TableList = ({ db }) => {
                 setTables(list);
                 
                 // If there is exactly one table, show it directly without changing URL
-                if (list.length === 1) {
+                if (list.length === 1 && data.autoRedirectSingleTable !== false) {
                     setActiveTable(list[0].name);
                 } 
                 // Alternatively, if the config says autoRedirect, we could still respect that, 
