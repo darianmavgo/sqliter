@@ -14,7 +14,22 @@ import (
 	"github.com/darianmavgo/sqliter/sqliter"
 )
 
+var version = "dev"
+
 func main() {
+	if len(os.Args) > 1 {
+		if os.Args[1] == "--version" {
+			fmt.Printf("sqliter version %s\n", version)
+			return
+		}
+		if os.Args[1] == "--help" {
+			fmt.Println("Usage: sqliter [file or url]")
+			fmt.Println("  file: path to local sqlite database file or directory containing database files")
+			fmt.Println("  url:  url to a remote sqlite database file")
+			return
+		}
+	}
+
 	var arg string
 	if len(os.Args) < 2 {
 		home, err := os.UserHomeDir()
