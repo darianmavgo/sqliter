@@ -2,100 +2,35 @@
 
 **SQLiter** is a lightweight, high-performance SQLite database viewer and editor. It combines a robust Go server with a modern React frontend (using Ag-Grid) to provide a seamless data browsing experience.
 
-## ✨ Features
+## Features Supported
 
-- **🚀 Streaming Performance**: Uses Ag-Grid's Infinite Row Model to handle large datasets efficiently without loading everything into memory.
-- **📦 Single Binary**: The React frontend is embedded into the Go binary, making deployment as simple as copying a single executable.
-- **🛠️ CRUD Operations**: Create, update, and delete rows directly from the interface.
-- **🔗 Deep Linking**: Every view (database, table, query) is URL-addressable, making it easy to share specific data views.
-- **📂 Flexible Input**: Open local files, browse directories, or stream databases directly from a URL.
-- **⚡ Zero Configuration**: Just run the binary and point it to your data.
-- **🔍 Advanced Querying**: Supports complex filtering and sorting via URL parameters (powered by [Banquet](https://github.com/darianmavgo/banquet)).
+*   **High-Peformance Streaming**: integration with Ag-Grid's Infinite Row Model allows browsing million-row datasets with zero lag.
+*   **Single-Binary Distribution**: The entire React frontend is embedded in the Go binary. No separate node server required for deployment.
+*   **CRUD Operations**: Full support for Creating, Reading, Updating, and Deleting rows via the UI.
+*   **Deep Linking**: Every query, filter, and view state is encoded in the URL, making data shareable.
+*   **Advanced Querying**: Leverages **Banquet** to support complex filtering, sorting, and column selection via URL parameters.
+*   **Flexible Inputs**: Supports local files, directories, and remote URLs (streaming SQLite over HTTP).
 
-## 📦 Installation
+## Area of Responsibility
 
-### Using Go Install
-If you have Go installed, you can install the latest version directly:
+SQLiter is the **Presentation Layer**. It is responsible for:
+1.  **Visualization**: Rendering raw data into interactive, human-readable tables.
+2.  **Interaction**: providing the user interface for exploring, filtering, and editing data.
+3.  **Delivery**: Serving the client-side application to the browser.
+It acts as the "Face" of the data ecosystem.
+
+## Scope (What it explicitly doesn't do)
+
+*   **No Data Ingestion/Conversion**: SQLiter expects data to already be in valid SQLite format (or a compatible directory structure). It does not convert CSVs or scrape websites (that is the job of `mksqlite`).
+*   **Not a Generic Web Server**: While it includes an HTTP server, it is specialized for serving database content and API endpoints. It is not designed to host general-purpose websites.
+*   **No User Management**: It assumes it is running in a trusted environment or behind a gateway (like `flight3` or PocketBase) that handles auth; it does not implement its own user/role system.
+
+## Usage
 
 ```bash
-go install github.com/darianmavgo/sqliter/cmd/sqliter@latest
+# View a database
+sqliter my_data.db
+
+# View a remote file
+sqliter https://example.com/data.sqlite
 ```
-
-### Building from Source
-
-1.  **Prerequisites**:
-    *   Go 1.24+
-    *   Node.js & npm (for building the frontend)
-
-2.  **Clone and Build**:
-    ```bash
-    git clone https://github.com/darianmavgo/sqliter.git
-    cd sqliter
-    ./react_go_build.sh
-    ```
-    This script builds the React client, embeds it into the Go server, and produces a binary in `bin/sqliter`.
-
-## 🚀 Usage
-
-Run `sqliter` with a file, directory, or URL:
-
-### Open a Local Database
-```bash
-sqliter my_database.db
-```
-
-### Browse a Directory
-```bash
-sqliter ~/Documents/databases
-```
-
-### Open a Remote Database
-```bash
-sqliter https://example.com/datasets/large_data.sqlite
-```
-
-The application will automatically find an available port, start the server, and open your default browser.
-
-## 🛠️ Development
-
-The project consists of two main parts:
-1.  **Backend (`/sqliter`, `/cmd`)**: A Go HTTP server using `modernc.org/sqlite` (CGO-free).
-2.  **Frontend (`/react-client`)**: A React application using Vite and Ag-Grid.
-
-### Running in Development Mode
-
-To work on the frontend with hot-reload:
-
-1.  **Start the Go Server** (serving data):
-    ```bash
-    go run cmd/sqliter/main.go sample_data/
-    ```
-    *Note the port it starts on (e.g., 8080).*
-
-2.  **Start the React Client**:
-    ```bash
-    cd react-client
-    npm install
-    npm run dev
-    ```
-    *Open the Vite URL (e.g., http://localhost:5173).*
-
-    *Note: You may need to configure the React app to proxy requests to the Go server port if not automatically handled.*
-
-### Building the Release
-
-Use the provided script to build the full distribution:
-```bash
-./react_go_build.sh
-```
-
-## 🏗️ Architecture
-
--   **Server**: Go (Standard Library + `modernc.org/sqlite` + `banquet` for query parsing).
--   **Client**: React + Ag-Grid Community + Vite.
--   **Communication**: REST API (`/sqliter/...`) serving JSON.
--   **Embedding**: `go:embed` is used to bundle the compiled React assets (`dist/`) into the Go binary.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
