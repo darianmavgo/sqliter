@@ -379,3 +379,70 @@ end open
 
 	return nil
 }
+
+// SyncWailsUI builds the React client and copies it to the Wails frontend directory
+func SyncWailsUI() error {
+	fmt.Println("📦 Syncing UI assets for Wails...")
+
+	// Build the UI first
+	if err := BuildUI(); err != nil {
+		return err
+	}
+
+	wailsDistDir := filepath.Join("cmd", "wailssqliter", "frontend", "dist")
+	if err := os.MkdirAll(wailsDistDir, 0755); err != nil {
+		return err
+	}
+
+	// Copy files from react-client/dist/ to cmd/wailssqliter/frontend/dist/
+	return sh.RunV("cp", "-R", "react-client/dist/", wailsDistDir+"/")
+}
+
+// WailsBuild builds the Wails desktop application
+func WailsBuild() error {
+	mg.Deps(SyncWailsUI)
+	fmt.Println("🖥️  Building Wails desktop application...")
+
+	// Save current directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	defer os.Chdir(oldDir)
+
+	// We need to run wails build from cmd/wailssqliter
+	wailsDir := filepath.Join("cmd", "wailssqliter")
+	if err := os.Chdir(wailsDir); err != nil {
+		return err
+	}
+
+	// Check if wails is installed
+	if _, err := exec.LookPath("wails"); err != nil {
+		return fmt.Errorf("wails command not found. Please install it with 'go install github.com/wailsapp/wails/v2/cmd/wails@latest'")
+	}
+
+	return sh.RunV("wails", "build", "-s")
+}
+
+// WailsDev runs the Wails desktop application in development mode
+func WailsDev() error {
+	fmt.Println("🚀 Starting Wails development mode...")
+
+	// Save current directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	defer os.Chdir(oldDir)
+
+	wailsDir := filepath.Join("cmd", "wailssqliter")
+	if err := os.Chdir(wailsDir); err != nil {
+		return err
+	}
+
+	if _, err := exec.LookPath("wails"); err != nil {
+		return fmt.Errorf("wails command not found. Please install it with 'go install github.com/wailsapp/wails/v2/cmd/wails@latest'")
+	}
+
+	return sh.RunV("wails", "dev")
+}

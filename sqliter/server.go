@@ -2,7 +2,6 @@ package sqliter
 
 import (
 	"bytes"
-	"database/sql"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -15,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/darianmavgo/banquet"
-	"github.com/darianmavgo/banquet/sqlite"
 	_ "modernc.org/sqlite"
 )
 
@@ -25,11 +22,13 @@ var uiFS embed.FS
 
 type Server struct {
 	config *Config
+	engine *Engine
 }
 
 func NewServer(cfg *Config) *Server {
 	return &Server{
 		config: cfg,
+		engine: NewEngine(cfg),
 	}
 }
 
@@ -169,42 +168,10 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
-	if strings.Contains(dir, "..") {
-		s.writeJSONError(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	targetDir := filepath.Join(s.config.ServeFolder, dir)
-	abs, _ := filepath.Abs(targetDir)
-	log.Printf("[API] Listing directory: %s", abs)
-
-	entries, err := os.ReadDir(targetDir)
+	files, err := s.engine.ListFiles(dir)
 	if err != nil {
-		s.writeJSONError(w, fmt.Sprintf("Failed to read directory: %v", err), http.StatusInternalServerError)
+		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	type FileEntry struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-
-	files := make([]FileEntry, 0)
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, ".") {
-			continue
-		}
-
-		if entry.IsDir() {
-			files = append(files, FileEntry{Name: name, Type: "directory"})
-		} else {
-			// Check extension
-			if strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") ||
-				strings.HasSuffix(name, ".csv.db") || strings.HasSuffix(name, ".xlsx.db") {
-				files = append(files, FileEntry{Name: name, Type: "database"})
-			}
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -218,38 +185,10 @@ func (s *Server) apiListTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.Contains(dbName, "..") {
-		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
-		return
-	}
-
-	dbPath := filepath.Join(s.config.ServeFolder, dbName)
-	db, err := sql.Open("sqlite", dbPath)
+	tables, err := s.engine.ListTables(dbName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Error opening DB: %v"}`, err), http.StatusInternalServerError)
+		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	defer db.Close()
-
-	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Database error: %v"}`, err), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	type TableInfo struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-
-	var tables []TableInfo
-	for rows.Next() {
-		var name, type_ string
-		if err := rows.Scan(&name, &type_); err != nil {
-			continue
-		}
-		tables = append(tables, TableInfo{Name: name, Type: type_})
 	}
 
 	type TableListResponse struct {
@@ -265,9 +204,6 @@ func (s *Server) apiListTables(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 	// Expecting 'path' parameter which is a Banquet URL, OR separate db/table/params
-	// For simplicity and alignment with the plan, let's look for 'path' or construct it.
-
-	// If 'path' is provided, parse it.
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		// Fallback: try to construct from db/table params for basic usage
@@ -281,21 +217,20 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Append standard grid params if not already in path
-	// AgGrid sends: start, end, sortCol, sortDir
+	opts := QueryOptions{
+		BanquetPath:   path,
+		AllowOverride: true,
+	}
+
 	qs := r.URL.Query()
 	start := qs.Get("start")
 	end := qs.Get("end")
 	sortCol := qs.Get("sortCol")
 	sortDir := qs.Get("sortDir")
 
-	// We can rely on Banquet parsing, but we might need to inject these if they are separate.
-	// simpler to just re-parse the path and then override specifics if provided.
-
-	bq, err := banquet.ParseNested(path)
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Error parsing URL: %v"}`, err), http.StatusBadRequest)
-		return
+	// Check for skipTotalCount
+	if strings.ToLower(qs.Get("skipTotalCount")) == "true" {
+		opts.SkipTotalCount = true
 	}
 
 	// Override limit/offset if provided by AgGrid params
@@ -303,14 +238,14 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		sIdx, _ := strconv.Atoi(start)
 		eIdx, _ := strconv.Atoi(end)
 		limit := eIdx - sIdx
-		bq.Limit = fmt.Sprintf("%d", limit)
-		bq.Offset = fmt.Sprintf("%d", sIdx)
+		opts.Limit = limit
+		opts.Offset = sIdx
 	}
 
 	if sortCol != "" {
-		bq.OrderBy = sortCol
+		opts.SortCol = sortCol
 		if sortDir != "" {
-			bq.SortDirection = sortDir
+			opts.SortDir = sortDir
 		}
 	}
 
@@ -322,124 +257,16 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf(`{"error": "Error parsing filter: %v"}`, err), http.StatusBadRequest)
 			return
 		}
-		if filterWhere != "" {
-			if bq.Where != "" {
-				bq.Where = fmt.Sprintf("(%s) AND (%s)", bq.Where, filterWhere)
-			} else {
-				bq.Where = filterWhere
-			}
-		}
+		opts.FilterWhere = filterWhere
 	}
 
-	dataSetPath := strings.TrimPrefix(bq.DataSetPath, "/")
-	if strings.Contains(dataSetPath, "..") {
-		http.Error(w, `{"error": "Invalid path"}`, http.StatusBadRequest)
-		return
-	}
-
-	dbPath := filepath.Join(s.config.ServeFolder, dataSetPath)
-	db, err := sql.Open("sqlite", dbPath)
+	result, err := s.engine.Query(opts)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Error opening DB: %v"}`, err), http.StatusInternalServerError)
-		return
-	}
-	defer db.Close()
-
-	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
-		s.logError("Error setting PRAGMAs: %v", err)
-	}
-
-	// Handle case where table name is missing (e.g. user provided columns in URL but no table)
-	if bq.Table == "" {
-		// Check available tables
-		rows, err := db.Query("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
-		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error": "Failed to list tables: %v"}`, err), http.StatusInternalServerError)
-			return
-		}
-		var tables []string
-		for rows.Next() {
-			var name string
-			if err := rows.Scan(&name); err == nil {
-				tables = append(tables, name)
-			}
-		}
-		rows.Close()
-
-		if len(tables) == 1 {
-			bq.Table = tables[0]
-		} else if len(tables) == 0 {
-			http.Error(w, `{"error": "No tables found in database"}`, http.StatusBadRequest)
-			return
-		} else {
-			http.Error(w, fmt.Sprintf(`{"error": "Table name required. Available tables: %s"}`, strings.Join(tables, ", ")), http.StatusBadRequest)
-			return
-		}
-	}
-
-	query := sqlite.Compose(bq)
-
-	// Get total count for pagination (optional, but good for AgGrid infinite model)
-	// We'll do a separate count query
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", sqlite.QuoteIdentifier(bq.Table))
-	if bq.Where != "" {
-		countQuery += " WHERE " + bq.Where
-	}
-	var totalCount int
-	_ = db.QueryRow(countQuery).Scan(&totalCount)
-
-	rows, err := db.Query(query)
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Query error: %v", "sql": "%s"}`, err, query), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error": "Error getting columns: %v"}`, err), http.StatusInternalServerError)
+		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Result structure
-	type APIResponse struct {
-		Columns    []string                 `json:"columns"`
-		Rows       []map[string]interface{} `json:"rows"`
-		TotalCount int                      `json:"totalCount"`
-		SQL        string                   `json:"sql"`
-	}
-
-	resp := APIResponse{
-		Columns:    columns,
-		TotalCount: totalCount,
-		SQL:        query,
-		Rows:       []map[string]interface{}{},
-	}
-
-	values := make([]interface{}, len(columns))
-	valuePtrs := make([]interface{}, len(columns))
-	for i := range values {
-		valuePtrs[i] = &values[i]
-	}
-
-	for rows.Next() {
-		if err := rows.Scan(valuePtrs...); err != nil {
-			continue
-		}
-
-		rowMap := make(map[string]interface{})
-		for i, col := range columns {
-			val := values[i]
-			if b, ok := val.([]byte); ok {
-				rowMap[col] = string(b)
-			} else {
-				rowMap[col] = val
-			}
-		}
-		resp.Rows = append(resp.Rows, rowMap)
-	}
-
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(result)
 }
 
 func (s *Server) writeJSONError(w http.ResponseWriter, msg string, code int) {

@@ -5,31 +5,25 @@ import { BrowserRouter, Routes, Route, Link, useParams, useNavigate } from 'reac
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import './index.css';
+import { HttpClient } from './api/httpClient';
+import { WailsClient } from './api/wailsClient';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Helper to resolve API URLs based on global config
-const getApiUrl = (endpoint, params = {}) => {
+// Initialize Client
+const initializeClient = () => {
+    // Check for Wails environment
+    if (window.go && window.runtime) {
+        console.log("Using Wails Client");
+        return new WailsClient();
+    }
+    // Default to HTTP
     const config = window.SQLITER_CONFIG || {};
-    // Base path logic:
-    // If we are mounted at /tools/sqliter, the API is at /tools/sqliter/sqliter/...
-    // Wait, the Go server handles /sqliter/ prefix logic.
-    // Ideally if mounted at /tools/sqliter, requests should go to /tools/sqliter/sqliter/fs...
-    // The basePath should be the mount point.
-    
-    let base = config.basePath || '';
-    if (base.endsWith('/')) base = base.slice(0, -1);
-    // Endpoint usually starts with /
-    
-    // Construct Query String
-    const url = new URL(window.location.origin + base + endpoint);
-    Object.keys(params).forEach(key => {
-        if (params[key] !== undefined && params[key] !== null) {
-            url.searchParams.append(key, params[key]);
-        }
-    });
-    return url.toString().replace(window.location.origin, ''); // Return relative path
+    console.log("Using Http Client", config);
+    return new HttpClient(config.basePath);
 };
+
+const client = initializeClient();
 
 const FileBrowser = ({ path }) => {
   const [rowData, setRowData] = useState([]);
@@ -37,14 +31,8 @@ const FileBrowser = ({ path }) => {
   
   useEffect(() => {
     setError(null);
-    fetch(getApiUrl('/sqliter/fs', { dir: path || '' }))
-      .then(r => r.json())
+    client.listFiles(path || '')
       .then(d => {
-        if (d && d.error) {
-            setError(d.error);
-            setRowData([]);
-            return;
-        }
         if (Array.isArray(d)) {
           setRowData(d);
         } else {
@@ -55,7 +43,7 @@ const FileBrowser = ({ path }) => {
       })
       .catch(err => {
         console.error("Fetch error:", err);
-        setError("Network error or server unreachable");
+        setError(err.message || "Network error");
         setRowData([]);
       });
   }, [path]);
@@ -105,26 +93,17 @@ const TableList = ({ db }) => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // Reset active table when DB changes
         setActiveTable(null);
-        
-        fetch(getApiUrl('/sqliter/tables', { db }))
-            .then(r => r.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-                const list = data.tables || [];
+        client.listTables(db)
+            .then(list => {
                 setTables(list);
-                
-                // If there is exactly one table, show it directly without changing URL
-                if (list.length === 1 && data.autoRedirectSingleTable !== false) {
-                    setActiveTable(list[0].name);
-                } 
-                // Alternatively, if the config says autoRedirect, we could still respect that, 
-                // but the user usage implies we prefer this inline rendering for single tables now.
-            });
+                // Auto-redirect logic could be handled here if we passed config to client or checked list length
+                // For now, keeping it simple.
+                if (list.length === 1) {
+                     setActiveTable(list[0].name);
+                }
+            })
+            .catch(err => alert(err.message));
     }, [db, navigate]);
 
     const colDefs = useMemo(() => [
@@ -161,22 +140,19 @@ const TableList = ({ db }) => {
 const GridView = ({ db, table, rest }) => {
     const [colDefs, setColDefs] = useState([]);
 
+    // Fetch initial column defs
     useEffect(() => {
          let path = `/${db}/${table}`;
          if (rest) {
              path += `/${rest}`;
          }
-         fetch(getApiUrl('/sqliter/rows', { path, start: 0, end: 0 }))
-            .then(r => r.json())
+         client.query(path, { start: 0, end: 0 })
             .then(data => {
-                if (data.error) {
-                    console.error(data.error);
-                    return;
-                }
                 if (data.columns) {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
                 }
-            });
+            })
+            .catch(console.error);
     }, [db, table, rest]);
 
     const onGridReady = useCallback((params) => {
@@ -190,9 +166,9 @@ const GridView = ({ db, table, rest }) => {
                 }
                 
                 const apiParams = {
-                    path,
                     start: startRow,
-                    end: endRow
+                    end: endRow,
+                    skipTotalCount: true
                 };
                 
                 if (sortModel.length > 0) {
@@ -202,16 +178,11 @@ const GridView = ({ db, table, rest }) => {
                 }
 
                 if (wsParams.filterModel && Object.keys(wsParams.filterModel).length > 0) {
-                    apiParams.filterModel = JSON.stringify(wsParams.filterModel);
+                    apiParams.filterModel = wsParams.filterModel;
                 }
 
-                fetch(getApiUrl('/sqliter/rows', apiParams))
-                    .then(resp => resp.json())
+                client.query(path, apiParams)
                     .then(data => {
-                         if (data.error) {
-                             wsParams.failCallback();
-                             return;
-                         }
                          wsParams.successCallback(data.rows, data.totalCount);
                     })
                     .catch(err => {
@@ -249,9 +220,6 @@ const MainRouter = () => {
         document.title = title.length > 80 ? title.substring(title.length - 80) : title;
     }, [splat]);
 
-    // Logic to determine what to show
-    // We look for a database extension in the path to split DB path from table path.
-    // Extensions: .db, .sqlite, .csv.db, .xlsx.db
     const dbMatch = splat.match(/(.*?\.(?:db|sqlite|csv\.db|xlsx\.db))(?:\/|$)(.*)/);
 
     if (dbMatch) {
@@ -259,30 +227,21 @@ const MainRouter = () => {
         const restPath = dbMatch[2];
 
         if (!restPath) {
-            // It's just the DB, list tables
             return <TableList db={dbPath} />;
         } else {
-             // It's inside a DB
              const parts = restPath.split('/');
              const table = parts[0];
              const rest = parts.slice(1).join('/');
              return <GridView db={dbPath} table={table} rest={rest} />;
         }
     } else {
-        // It's a directory
         return <FileBrowser path={splat} />;
     }
 }
 
 const App = () => {
-  // Read config injected by server, or default to empty (root)
-  // Config is expected to be: window.SQLITER_CONFIG = { basePath: "/some/prefix" }
   const config = window.SQLITER_CONFIG || {};
   const basePath = config.basePath || ''; 
-
-  // Normalize basePath for Router: remove trailing slash if present, ensure leading slash if not empty?
-  // Actually, BrowserRouter 'basename' expects a leading slash (e.g. /app). 
-  // If it's empty, it means root.
   
   return (
     <BrowserRouter basename={basePath}>
