@@ -14,6 +14,10 @@ export function OpenDatabase() {
   return window['go']['wails']['App']['OpenDatabase']();
 }
 
+export function OpenFile(arg1) {
+  return window['go']['wails']['App']['OpenFile'](arg1);
+}
+
 export function Query(arg1) {
   return window['go']['wails']['App']['Query'](arg1);
 }

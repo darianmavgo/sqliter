@@ -239,15 +239,109 @@ const MainRouter = () => {
     }
 }
 
+const Navbar = () => {
+    const navigate = useNavigate();
+    const params = useParams();
+    const splat = params["*"] || "";
+    const [inputValue, setInputValue] = useState(splat);
+
+    useEffect(() => {
+        setInputValue(splat);
+    }, [splat]);
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            const path = inputValue.startsWith('/') ? inputValue : `/${inputValue}`;
+            navigate(path);
+        }
+    };
+
+    return (
+        <div style={{ 
+            height: '40px', 
+            background: '#20232a', 
+            display: 'flex', 
+            alignItems: 'center', 
+            padding: '0 10px', 
+            borderBottom: '1px solid #333',
+            gap: '10px'
+        }}>
+            <button 
+                onClick={() => navigate(-1)} 
+                style={{ background: 'none', border: 'none', color: '#61dafb', cursor: 'pointer', fontSize: '18px' }}
+                title="Back"
+            >
+                ←
+            </button>
+            <button 
+                onClick={() => navigate('/')} 
+                style={{ background: 'none', border: 'none', color: '#61dafb', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+                SQLiter
+            </button>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#282c34', borderRadius: '4px', padding: '0 8px' }}>
+                <span style={{ color: '#888', marginRight: '5px' }}>URI</span>
+                <input 
+                    type="text" 
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    style={{ 
+                        flex: 1, 
+                        background: 'none', 
+                        border: 'none', 
+                        color: '#fff', 
+                        outline: 'none', 
+                        padding: '5px 0',
+                        fontSize: '13px',
+                        fontFamily: 'monospace'
+                    }}
+                />
+            </div>
+            {window.go && (
+                <button 
+                    onClick={() => client.openDatabase().then(p => p && navigate(`/${p}`))}
+                    style={{ background: '#61dafb', border: 'none', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                    Open File
+                </button>
+            )}
+        </div>
+    );
+};
+
+const InnerApp = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (window.runtime && window.runtime.EventsOn) {
+        console.log("Setting up Wails event listeners");
+        // Handle files opened via macOS Finder
+        window.runtime.EventsOn("open-file", (filePath) => {
+            console.log("Wails open-file event:", filePath);
+            // Ensure no double leading slash
+            const target = filePath.startsWith('/') ? filePath : `/${filePath}`;
+            navigate(target);
+        });
+    }
+  }, [navigate]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#282c34', color: '#fff' }}>
+        <Routes>
+            <Route path="/*" element={<><Navbar /><div style={{ flex: 1, overflow: 'hidden' }}><MainRouter /></div></>} />
+        </Routes>
+    </div>
+  );
+}
+
 const App = () => {
   const config = window.SQLITER_CONFIG || {};
   const basePath = config.basePath || ''; 
   
   return (
     <BrowserRouter basename={basePath}>
-        <Routes>
-            <Route path="/*" element={<MainRouter />} />
-        </Routes>
+        <InnerApp />
     </BrowserRouter>
   );
 };

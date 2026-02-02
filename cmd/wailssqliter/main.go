@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -29,6 +30,9 @@ func main() {
 		OnShutdown:       app.Shutdown,
 		Bind: []interface{}{
 			app,
+		},
+		Mac: &mac.Options{
+			OnFileOpen: app.OpenFile,
 		},
 	})
 

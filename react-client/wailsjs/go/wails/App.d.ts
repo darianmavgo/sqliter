@@ -8,4 +8,6 @@ export function ListTables(arg1:string):Promise<Array<sqliter.TableInfo>>;
 
 export function OpenDatabase():Promise<string>;
 
+export function OpenFile(arg1:string):Promise<void>;
+
 export function Query(arg1:sqliter.QueryOptions):Promise<sqliter.QueryResult>;

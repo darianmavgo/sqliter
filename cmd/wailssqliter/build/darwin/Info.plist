@@ -38,6 +38,8 @@
             <string>{{.Role}}</string>
             <key>CFBundleTypeIconFile</key>
             <string>{{.IconName}}</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
           </dict>
           {{end}}
         </array>

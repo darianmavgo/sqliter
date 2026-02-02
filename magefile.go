@@ -457,7 +457,7 @@ func WailsInstall() error {
 
 	fmt.Println("🍎 Installing Wails App to /Applications...")
 
-	srcApp := filepath.Join("cmd", "wailssqliter", "build", "bin", "wailssqliter.app")
+	srcApp := filepath.Join("cmd", "wailssqliter", "build", "bin", "sqliter.app")
 	destApp := "/Applications/SQLiter.app"
 
 	// 1. Remove existing app if it exists
@@ -489,6 +489,31 @@ func WailsInstall() error {
 		}
 	} else {
 		fmt.Println("⚠️  lsregister not found, system may not pick up changes immediately.")
+	}
+
+	// 4. Set as Default Handler using Swift
+	fmt.Println("🔒 Setting SQLiter as default handler for SQLite files...")
+	bundleID := "com.wails.sqliter"
+	swiftScript := fmt.Sprintf(`
+import Foundation
+import CoreServices
+
+let bundleId = "%s" as CFString
+let utis = ["org.sqlite.sqlite3", "com.sqlite.db", "public.database", "io.sqlite.db"]
+
+for uti in utis {
+    let utiString = uti as CFString
+    let result = LSSetDefaultRoleHandlerForContentType(utiString, .editor, bundleId)
+    if result == 0 {
+        print("  ✅ Set default for \(uti)")
+    } else {
+        print("  ⚠️  Failed to set default for \(uti): \(result)")
+    }
+}
+`, bundleID)
+
+	if err := sh.Run("swift", "-e", swiftScript); err != nil {
+		fmt.Printf("Warning: failed to set default handler: %v\n", err)
 	}
 
 	fmt.Printf("✅ Wails App installed to: %s\n", destApp)

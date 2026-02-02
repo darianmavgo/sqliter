@@ -65,3 +65,11 @@ func (a *App) ListTables(db string) ([]sqliter.TableInfo, error) {
 func (a *App) Query(opts sqliter.QueryOptions) (*sqliter.QueryResult, error) {
 	return a.engine.Query(opts)
 }
+
+// OpenFile is called when macOS sends a file open event
+func (a *App) OpenFile(filePath string) {
+	if filePath != "" {
+		// Emit event to frontend with the file path
+		runtime.EventsEmit(a.ctx, "open-file", filePath)
+	}
+}
