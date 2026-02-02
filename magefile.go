@@ -446,3 +446,51 @@ func WailsDev() error {
 
 	return sh.RunV("wails", "dev")
 }
+
+// WailsInstall builds the Wails application and installs it to the /Applications directory
+func WailsInstall() error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("WailsInstall is only supported on macOS")
+	}
+
+	mg.Deps(WailsBuild)
+
+	fmt.Println("🍎 Installing Wails App to /Applications...")
+
+	srcApp := filepath.Join("cmd", "wailssqliter", "build", "bin", "wailssqliter.app")
+	destApp := "/Applications/SQLiter.app"
+
+	// 1. Remove existing app if it exists
+	if _, err := os.Stat(destApp); err == nil {
+		fmt.Printf("🗑️  Removing existing %s...\n", destApp)
+		if err := sh.Run("rm", "-rf", destApp); err != nil {
+			return fmt.Errorf("failed to remove existing app: %w", err)
+		}
+	}
+
+	// 2. Copy the app bundle
+	// Using cp -R to copy the bundle.
+	if err := sh.RunV("cp", "-R", srcApp, destApp); err != nil {
+		return fmt.Errorf("failed to copy app to /Applications: %w", err)
+	}
+
+	// 3. Register with Launch Services to ensure the system picks up the new app
+	fmt.Println("🚀 Registering with Launch Services...")
+	lsregister := "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+	// Fallback path for different macOS versions
+	if _, err := os.Stat(lsregister); err != nil {
+		lsregister = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+	}
+
+	if _, err := os.Stat(lsregister); err == nil {
+		// -f forces re-registration
+		if err := sh.Run(lsregister, "-f", destApp); err != nil {
+			fmt.Printf("Warning: lsregister failed: %v\n", err)
+		}
+	} else {
+		fmt.Println("⚠️  lsregister not found, system may not pick up changes immediately.")
+	}
+
+	fmt.Printf("✅ Wails App installed to: %s\n", destApp)
+	return nil
+}
