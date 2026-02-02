@@ -30,6 +30,12 @@ const FileBrowser = ({ path }) => {
   const [error, setError] = useState(null);
   
   useEffect(() => {
+    // Optimization: Don't list root ("") or "/" by default to avoid scanning slow volumes
+    if (!path || path === "/" || path.trim() === "") {
+        setRowData([]);
+        return;
+    }
+
     setError(null);
     client.listFiles(path || '')
       .then(d => {
@@ -62,6 +68,23 @@ const FileBrowser = ({ path }) => {
     },
     { field: "type", width: 150 }
   ], [path]);
+
+  if (!path || path === "/" || path.trim() === "") {
+      return (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>
+            <h2>Welcome to SQLiter</h2>
+            <p>Open a database file to get started</p>
+            {window.go && (
+                <button 
+                    onClick={() => client.openDatabase().then(p => p && (window.location.hash = `/${p}`))}
+                    style={{ background: '#61dafb', border: 'none', borderRadius: '4px', padding: '10px 20px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', marginTop: '20px', color: '#282c30' }}
+                >
+                    Open Database
+                </button>
+            )}
+        </div>
+      );
+  }
 
   if (error) {
       return (
@@ -146,7 +169,7 @@ const GridView = ({ db, table, rest }) => {
          if (rest) {
              path += `/${rest}`;
          }
-         client.query(path, { start: 0, end: 0 })
+         client.query(path, { start: 0, end: 0, skipTotalCount: true })
             .then(data => {
                 if (data.columns) {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
@@ -316,13 +339,21 @@ const InnerApp = () => {
   useEffect(() => {
     if (window.runtime && window.runtime.EventsOn) {
         console.log("Setting up Wails event listeners");
-        // Handle files opened via macOS Finder
-        window.runtime.EventsOn("open-file", (filePath) => {
-            console.log("Wails open-file event:", filePath);
-            // Ensure no double leading slash
+        
+        const handleFile = (filePath) => {
+            console.log("Processing file path:", filePath);
+            if (!filePath) return;
             const target = filePath.startsWith('/') ? filePath : `/${filePath}`;
             navigate(target);
-        });
+        };
+
+        // Handle files opened via macOS Finder while app is running
+        window.runtime.EventsOn("open-file", handleFile);
+
+        // Check for file opened at startup
+        client.getPendingFile?.().then(handleFile);
+
+        return () => window.runtime.EventsOff("open-file");
     }
   }, [navigate]);
 

@@ -2,6 +2,7 @@ package wails
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/darianmavgo/sqliter/sqliter"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -9,8 +10,9 @@ import (
 
 // App struct
 type App struct {
-	ctx    context.Context
-	engine *sqliter.Engine
+	ctx         context.Context
+	engine      *sqliter.Engine
+	pendingFile string
 }
 
 // NewApp creates a new App application struct
@@ -27,6 +29,10 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	if a.pendingFile != "" {
+		// Small delay or just reliance on frontend polling/ready event
+		runtime.EventsEmit(a.ctx, "open-file", a.pendingFile)
+	}
 }
 
 // Shutdown is called at termination
@@ -68,8 +74,17 @@ func (a *App) Query(opts sqliter.QueryOptions) (*sqliter.QueryResult, error) {
 
 // OpenFile is called when macOS sends a file open event
 func (a *App) OpenFile(filePath string) {
-	if filePath != "" {
+	fmt.Println("Received OpenFile:", filePath)
+	a.pendingFile = filePath
+	if a.ctx != nil {
 		// Emit event to frontend with the file path
 		runtime.EventsEmit(a.ctx, "open-file", filePath)
 	}
+}
+
+// GetPendingFile returns the file that was opened before the frontend was ready
+func (a *App) GetPendingFile() string {
+	p := a.pendingFile
+	a.pendingFile = "" // Clear it once read
+	return p
 }

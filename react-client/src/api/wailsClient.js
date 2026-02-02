@@ -64,4 +64,8 @@ export class WailsClient extends DataClient {
     async openDatabase() {
         return window.go.wails.App.OpenDatabase();
     }
+
+    async getPendingFile() {
+        return window.go.wails.App.GetPendingFile();
+    }
 }
