@@ -240,6 +240,9 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		limit := eIdx - sIdx
 		opts.Limit = limit
 		opts.Offset = sIdx
+		if limit == 0 {
+			opts.ForceZeroLimit = true
+		}
 	}
 
 	if sortCol != "" {

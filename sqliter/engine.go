@@ -101,6 +101,7 @@ type QueryOptions struct {
 	SortDir         string
 	Offset          int
 	Limit           int
+	ForceZeroLimit  bool // If true, explicitly set Limit to 0
 	AllowOverride   bool // If true, Limit/Offset in options override BanquetPath defaults
 	SkipTotalCount  bool // If true, skips the COUNT(*) query for performance
 }
@@ -119,9 +120,14 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 	}
 
 	// Override limit/offset if provided
-	if opts.AllowOverride && opts.Limit > 0 {
-		bq.Limit = fmt.Sprintf("%d", opts.Limit)
-		bq.Offset = fmt.Sprintf("%d", opts.Offset)
+	if opts.AllowOverride {
+		if opts.Limit > 0 {
+			bq.Limit = fmt.Sprintf("%d", opts.Limit)
+			bq.Offset = fmt.Sprintf("%d", opts.Offset)
+		} else if opts.ForceZeroLimit {
+			bq.Limit = "0"
+			bq.Offset = fmt.Sprintf("%d", opts.Offset)
+		}
 	}
 
 	if opts.SortCol != "" {
