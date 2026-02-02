@@ -17,10 +17,12 @@ export namespace sqliter {
 	export class QueryOptions {
 	    BanquetPath: string;
 	    FilterWhere: string;
+	    FilterModelJSON: string;
 	    SortCol: string;
 	    SortDir: string;
 	    Offset: number;
 	    Limit: number;
+	    ForceZeroLimit: boolean;
 	    AllowOverride: boolean;
 	    SkipTotalCount: boolean;
 	
@@ -32,10 +34,12 @@ export namespace sqliter {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.BanquetPath = source["BanquetPath"];
 	        this.FilterWhere = source["FilterWhere"];
+	        this.FilterModelJSON = source["FilterModelJSON"];
 	        this.SortCol = source["SortCol"];
 	        this.SortDir = source["SortDir"];
 	        this.Offset = source["Offset"];
 	        this.Limit = source["Limit"];
+	        this.ForceZeroLimit = source["ForceZeroLimit"];
 	        this.AllowOverride = source["AllowOverride"];
 	        this.SkipTotalCount = source["SkipTotalCount"];
 	    }
