@@ -94,14 +94,15 @@ func (e *Engine) ListTables(dbRelPath string) ([]TableInfo, error) {
 }
 
 type QueryOptions struct {
-	BanquetPath    string
-	FilterWhere    string // SQL fragment
-	SortCol        string
-	SortDir        string
-	Offset         int
-	Limit          int
-	AllowOverride  bool // If true, Limit/Offset in options override BanquetPath defaults
-	SkipTotalCount bool // If true, skips the COUNT(*) query for performance
+	BanquetPath     string
+	FilterWhere     string // SQL fragment
+	FilterModelJSON string // AgGrid Filter Model JSON
+	SortCol         string
+	SortDir         string
+	Offset          int
+	Limit           int
+	AllowOverride   bool // If true, Limit/Offset in options override BanquetPath defaults
+	SkipTotalCount  bool // If true, skips the COUNT(*) query for performance
 }
 
 type QueryResult struct {
@@ -127,6 +128,20 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 		bq.OrderBy = opts.SortCol
 		if opts.SortDir != "" {
 			bq.SortDirection = opts.SortDir
+		}
+	}
+
+	if opts.FilterModelJSON != "" {
+		fmWhere, err := BuildWhereClause(opts.FilterModelJSON)
+		if err != nil {
+			return nil, fmt.Errorf("error building filter: %w", err)
+		}
+		if fmWhere != "" {
+			if opts.FilterWhere != "" {
+				opts.FilterWhere = fmt.Sprintf("(%s) AND (%s)", opts.FilterWhere, fmWhere)
+			} else {
+				opts.FilterWhere = fmWhere
+			}
 		}
 	}
 

@@ -11,13 +11,12 @@ export class WailsClient extends DataClient {
 
     async listFiles(dir) {
         // Map to Backend ListFiles
-        // Assuming wailssqliter app.go exposes ListFiles
-        return window.go.main.App.ListFiles(dir);
+        return window.go.wails.App.ListFiles(dir);
     }
 
     async listTables(db) {
         // Map to Backend ListTables
-        return window.go.main.App.ListTables(db);
+        return window.go.wails.App.ListTables(db);
     }
 
     async query(path, options = {}) {
@@ -58,11 +57,11 @@ export class WailsClient extends DataClient {
             queryOpts.FilterModelJSON = JSON.stringify(options.filterModel);
          }
 
-         return window.go.main.App.Query(queryOpts);
+         return window.go.wails.App.Query(queryOpts);
     }
     
     // Support for OpenDatabase (Specific to Wails usage)
     async openDatabase() {
-        return window.go.main.App.OpenDatabase();
+        return window.go.wails.App.OpenDatabase();
     }
 }
