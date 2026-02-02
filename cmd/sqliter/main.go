@@ -121,8 +121,8 @@ func main() {
 		}
 	}
 
-	// Get a random available port (preferring IPv6)
-	listener, err := net.Listen("tcp6", "[::]:0")
+	// Get a random available port (preferring IPv4)
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func main() {
 
 	srv := sqliter.NewServer(cfg)
 
-	url := fmt.Sprintf("http://[::1]:%d", port)
+	url := fmt.Sprintf("http://127.0.0.1:%d", port)
 	if fileName != "" {
 		url = fmt.Sprintf("%s/%s", url, fileName)
 	}
@@ -154,13 +154,13 @@ func main() {
 	// Main table viewer routes
 	mux.Handle("/", srv)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("[::]:%d", port), mux))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), mux))
 }
 
 func openBrowser(url string) {
 	var cmd *exec.Cmd
 	// Assume macOS for now based on context
-	cmd = exec.Command("open", "-a", "Google Chrome", url)
+	cmd = exec.Command("open", url)
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("Failed to open browser: %v\n", err)
 	}
