@@ -20,45 +20,58 @@ export class WailsClient extends DataClient {
     }
 
     async query(path, options = {}) {
-         const start = options.start !== undefined ? options.start : 0;
-         const end = options.end !== undefined ? options.end : 0;
-         
-         const limit = (options.end !== undefined) ? (end - start) : 0;
+        try {
+             const start = options.start !== undefined ? options.start : 0;
+             const end = options.end !== undefined ? options.end : 0;
 
-         const queryOpts = {
-             BanquetPath: path,
-             FilterWhere: "", 
-             SortCol: options.sortCol || "",
-             SortDir: options.sortDir || "",
-             Offset: start,
-             Limit: limit,
-             AllowOverride: true,
-             SkipTotalCount: !!options.skipTotalCount,
-             ForceZeroLimit: (limit === 0 && options.end !== undefined)
-         };
+             const limit = (options.end !== undefined) ? (end - start) : 0;
 
-         if (options.filterModel) {
-            queryOpts.FilterModelJSON = JSON.stringify(options.filterModel);
-         }
+             const queryOpts = {
+                 BanquetPath: path,
+                 FilterWhere: "",
+                 SortCol: options.sortCol || "",
+                 SortDir: options.sortDir || "",
+                 Offset: start,
+                 Limit: limit,
+                 AllowOverride: true,
+                 SkipTotalCount: !!options.skipTotalCount,
+                 ForceZeroLimit: (limit === 0 && options.end !== undefined)
+             };
 
-         const timerLabel = `[WailsClient] Query ${Date.now()}-${Math.random()}`;
-         console.time(timerLabel);
-         const response = await window.go.wails.App.Query(queryOpts);
-         console.timeEnd(timerLabel);
+             if (options.filterModel) {
+                queryOpts.FilterModelJSON = JSON.stringify(options.filterModel);
+             }
 
-         // Transform values (array of arrays) back to array of objects for frontend consumption
-         if (response.values && response.columns) {
-             const { values, columns } = response;
-             response.rows = values.map(row => {
-                 const obj = {};
-                 columns.forEach((col, index) => {
-                     obj[col] = row[index];
+             const timerLabel = `[WailsClient] Query ${Date.now()}-${Math.random()}`;
+             console.time(timerLabel);
+             const response = await window.go.wails.App.Query(queryOpts);
+             console.timeEnd(timerLabel);
+
+             // Transform values (array of arrays) back to array of objects for frontend consumption
+             if (response.values && response.columns) {
+                 const { values, columns } = response;
+                 response.rows = values.map(row => {
+                     const obj = {};
+                     columns.forEach((col, index) => {
+                         obj[col] = row[index];
+                     });
+                     return obj;
                  });
-                 return obj;
-             });
-         }
+             }
 
-         return response;
+             return response;
+        } catch (e) {
+            // Report memory usage if available (Chrome only)
+            if (window.performance && window.performance.memory) {
+                const mem = window.performance.memory;
+                console.error("Wails Query Failed. Memory Stats:", {
+                    usedJSHeapSize: Math.round(mem.usedJSHeapSize / 1024 / 1024) + ' MB',
+                    totalJSHeapSize: Math.round(mem.totalJSHeapSize / 1024 / 1024) + ' MB',
+                    jsHeapSizeLimit: Math.round(mem.jsHeapSizeLimit / 1024 / 1024) + ' MB'
+                });
+            }
+            throw e;
+        }
     }
     
     // Support for OpenDatabase (Specific to Wails usage)
