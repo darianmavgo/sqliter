@@ -1,5 +1,7 @@
 package sqliter
 
+const MaxRowsBuffer = 200
+
 // Config holds the configuration for the sqliter server.
 type Config struct {
 	// AutoRedirectSingleTable enables or disables automatic redirection when a database has only one table.

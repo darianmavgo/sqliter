@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -62,6 +63,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Check if we are serving index.html (either explicitly or via fallback)
 	f, err := distFS.Open(path)
+	// Try to recover asset paths for nested routes (e.g. /db/table/assets/index.css)
+	if err != nil && strings.Contains(path, "assets/") {
+		if idx := strings.LastIndex(path, "assets/"); idx != -1 {
+			assetPath := path[idx:]
+			if f2, err2 := distFS.Open(assetPath); err2 == nil {
+				f = f2
+				err = nil
+			}
+		}
+	}
+
 	if err == nil {
 		// File exists
 		defer f.Close()
@@ -118,6 +130,22 @@ func (s *Server) serveIndexWithConfig(w http.ResponseWriter, r *http.Request, f 
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			// Report memory usage. OOM happens if we hold references (retention) or exceed system limits,
+			// even if GC is working (it only cleans unreferenced memory).
+			msg := fmt.Sprintf("Panic/OOM detected: %v. Memory Stats: Alloc=%v MiB, TotalAlloc=%v MiB, Sys=%v MiB",
+				err, bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys))
+			s.logError("%s", msg)
+
+			// Try to write error if header not written
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": msg})
+		}
+	}()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // For development
 
@@ -243,6 +271,15 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		if limit == 0 {
 			opts.ForceZeroLimit = true
 		}
+	} else {
+		// Default to MaxRowsBuffer (200) buffer limit if no range specified
+		opts.Limit = MaxRowsBuffer
+		opts.Offset = 0
+	}
+
+	// Enforce hard limit on buffer size to prevent OOM
+	if opts.Limit > MaxRowsBuffer {
+		opts.Limit = MaxRowsBuffer
 	}
 
 	if sortCol != "" {
@@ -276,6 +313,10 @@ func (s *Server) writeJSONError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
 
 func (s *Server) logError(format string, args ...interface{}) {

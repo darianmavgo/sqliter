@@ -36,28 +36,41 @@ export class HttpClient extends DataClient {
     }
 
     async query(path, options = {}) {
-        const params = { path, ...options };
-        // handle filterModel specially if passed as object
-        if (params.filterModel && typeof params.filterModel === 'object') {
-            params.filterModel = JSON.stringify(params.filterModel);
-        }
-        
-        const res = await fetch(this._getUrl('/sqliter/rows', params));
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        try {
+            const params = { path, ...options };
+            // handle filterModel specially if passed as object
+            if (params.filterModel && typeof params.filterModel === 'object') {
+                params.filterModel = JSON.stringify(params.filterModel);
+            }
 
-        // Transform values (array of arrays) back to array of objects for frontend consumption
-        if (data.values && data.columns) {
-            const { values, columns } = data;
-            data.rows = values.map(row => {
-                const obj = {};
-                columns.forEach((col, index) => {
-                    obj[col] = row[index];
+            const res = await fetch(this._getUrl('/sqliter/rows', params));
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            // Transform values (array of arrays) back to array of objects for frontend consumption
+            if (data.values && data.columns) {
+                const { values, columns } = data;
+                data.rows = values.map(row => {
+                    const obj = {};
+                    columns.forEach((col, index) => {
+                        obj[col] = row[index];
+                    });
+                    return obj;
                 });
-                return obj;
-            });
-        }
+            }
 
-        return data;
+            return data;
+        } catch (e) {
+            // Report memory usage if available (Chrome only)
+            if (window.performance && window.performance.memory) {
+                const mem = window.performance.memory;
+                console.error("Query Failed. Memory Stats:", {
+                    usedJSHeapSize: Math.round(mem.usedJSHeapSize / 1024 / 1024) + ' MB',
+                    totalJSHeapSize: Math.round(mem.totalJSHeapSize / 1024 / 1024) + ' MB',
+                    jsHeapSizeLimit: Math.round(mem.jsHeapSizeLimit / 1024 / 1024) + ' MB'
+                });
+            }
+            throw e;
+        }
     }
 }

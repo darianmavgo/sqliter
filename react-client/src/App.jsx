@@ -223,7 +223,16 @@ const GridView = ({ db, table, rest }) => {
 
                 client.query(path, apiParams)
                     .then(data => {
-                         wsParams.successCallback(data.rows, data.totalCount);
+                         // Calculate lastRow for infinite scrolling if partial page returned
+                         const requestedRows = endRow - startRow;
+                         let lastRow = -1;
+                         if (data.totalCount !== -1) {
+                             lastRow = data.totalCount;
+                         } else if (data.rows.length < requestedRows) {
+                             // If we got fewer rows than requested, we reached the end
+                             lastRow = startRow + data.rows.length;
+                         }
+                         wsParams.successCallback(data.rows, lastRow);
                     })
                     .catch(err => {
                         console.error(err);
@@ -243,7 +252,7 @@ const GridView = ({ db, table, rest }) => {
                 rowModelType={'infinite'}
                 onGridReady={onGridReady}
                 cacheBlockSize={200}
-                maxBlocksInCache={10}
+                maxBlocksInCache={1}
                 rowHeight={32}
                 headerHeight={32}
             />
