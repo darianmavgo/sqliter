@@ -3,6 +3,9 @@ package wails
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/darianmavgo/sqliter/sqliter"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -60,15 +63,32 @@ func (a *App) OpenDatabase() (string, error) {
 	return selection, nil
 }
 
+// expandHome expands the tilde (~) in the path to the user's home directory
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") || path == "~" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			if path == "~" {
+				return home
+			}
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
+
 func (a *App) ListFiles(dir string) ([]sqliter.FileEntry, error) {
+	dir = expandHome(dir)
 	return a.engine.ListFiles(dir)
 }
 
 func (a *App) ListTables(db string) ([]sqliter.TableInfo, error) {
+	db = expandHome(db)
 	return a.engine.ListTables(db)
 }
 
 func (a *App) Query(opts sqliter.QueryOptions) (*sqliter.QueryResult, error) {
+	opts.BanquetPath = expandHome(opts.BanquetPath)
 	return a.engine.Query(opts)
 }
 

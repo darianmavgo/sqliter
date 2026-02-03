@@ -162,18 +162,22 @@ const TableList = ({ db }) => {
 
 const GridView = ({ db, table, rest }) => {
     const [colDefs, setColDefs] = useState([]);
+    const initialData = React.useRef(null);
 
-    // Fetch initial column defs
+    // Fetch initial column defs and first 50 rows
     useEffect(() => {
          let path = `/${db}/${table}`;
          if (rest) {
              path += `/${rest}`;
          }
-         client.query(path, { start: 0, end: 0, skipTotalCount: true })
+         // Request first 50 rows immediately to get columns + data
+         client.query(path, { start: 0, end: 50, skipTotalCount: true })
             .then(data => {
                 if (data.columns) {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
                 }
+                // Cache the initial rows to feed the grid immediately
+                initialData.current = data.rows;
             })
             .catch(console.error);
     }, [db, table, rest]);
@@ -183,6 +187,18 @@ const GridView = ({ db, table, rest }) => {
             rowCount: undefined,
             getRows: (wsParams) => {
                 const { startRow, endRow, sortModel } = wsParams;
+                
+                // Optimization: Use pre-fetched data for the first block if available
+                if (startRow === 0 && initialData.current && (!sortModel.length) && (!wsParams.filterModel || Object.keys(wsParams.filterModel).length === 0)) {
+                    console.log("Using initial data for first block");
+                    const rows = initialData.current;
+                    initialData.current = null; // Clear it so we don't reuse it inappropriately
+                    // If rows < 50, we know the exact count
+                    const lastRow = rows.length < 50 ? rows.length : -1;
+                    wsParams.successCallback(rows, lastRow);
+                    return;
+                }
+
                 let path = `/${db}/${table}`;
                 if (rest) {
                     path += `/${rest}`;
@@ -225,7 +241,7 @@ const GridView = ({ db, table, rest }) => {
                 columnDefs={colDefs}
                 rowModelType={'infinite'}
                 onGridReady={onGridReady}
-                cacheBlockSize={100}
+                cacheBlockSize={50}
                 maxBlocksInCache={10}
                 rowHeight={32}
                 headerHeight={32}
