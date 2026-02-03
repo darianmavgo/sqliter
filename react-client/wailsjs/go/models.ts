@@ -46,7 +46,7 @@ export namespace sqliter {
 	}
 	export class QueryResult {
 	    columns: string[];
-	    rows: any[];
+	    values: any[][];
 	    totalCount: number;
 	    sql: string;
 	
@@ -57,7 +57,7 @@ export namespace sqliter {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
-	        this.rows = source["rows"];
+	        this.values = source["values"];
 	        this.totalCount = source["totalCount"];
 	        this.sql = source["sql"];
 	    }
