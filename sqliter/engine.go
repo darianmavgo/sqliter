@@ -107,10 +107,10 @@ type QueryOptions struct {
 }
 
 type QueryResult struct {
-	Columns    []string                 `json:"columns"`
-	Rows       []map[string]interface{} `json:"rows"`
-	TotalCount int                      `json:"totalCount"`
-	SQL        string                   `json:"sql"`
+	Columns    []string        `json:"columns"`
+	Values     [][]interface{} `json:"values"`
+	TotalCount int             `json:"totalCount"`
+	SQL        string          `json:"sql"`
 }
 
 func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
@@ -226,7 +226,7 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 		Columns:    columns,
 		TotalCount: totalCount,
 		SQL:        query,
-		Rows:       make([]map[string]interface{}, 0),
+		Values:     make([][]interface{}, 0),
 	}
 
 	values := make([]interface{}, len(columns))
@@ -240,16 +240,16 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 			continue
 		}
 
-		rowMap := make(map[string]interface{})
-		for i, col := range columns {
+		rowData := make([]interface{}, len(columns))
+		for i := range columns {
 			val := values[i]
 			if b, ok := val.([]byte); ok {
-				rowMap[col] = string(b)
+				rowData[i] = string(b)
 			} else {
-				rowMap[col] = val
+				rowData[i] = val
 			}
 		}
-		resp.Rows = append(resp.Rows, rowMap)
+		resp.Values = append(resp.Values, rowData)
 	}
 
 	return resp, nil
