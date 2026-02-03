@@ -41,7 +41,21 @@ export class WailsClient extends DataClient {
             queryOpts.FilterModelJSON = JSON.stringify(options.filterModel);
          }
 
-         return window.go.wails.App.Query(queryOpts);
+         const response = await window.go.wails.App.Query(queryOpts);
+
+         // Transform values (array of arrays) back to array of objects for frontend consumption
+         if (response.values && response.columns) {
+             const { values, columns } = response;
+             response.rows = values.map(row => {
+                 const obj = {};
+                 columns.forEach((col, index) => {
+                     obj[col] = row[index];
+                 });
+                 return obj;
+             });
+         }
+
+         return response;
     }
     
     // Support for OpenDatabase (Specific to Wails usage)
