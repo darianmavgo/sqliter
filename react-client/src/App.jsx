@@ -295,6 +295,32 @@ const Navbar = () => {
         }
     };
 
+    // Check if current path is a table
+    const dbMatch = splat.match(/(.*?\.(?:db|sqlite|csv\.db|xlsx\.db))(?:\/|$)(.*)/);
+    const isTable = dbMatch && dbMatch[2];
+
+    const runSpeedTest = () => {
+        if (!isTable) return;
+        const path = `/${splat}`;
+        console.log(`[SpeedTest] Starting test for ${path}...`);
+        const start = performance.now();
+
+        // Match GridView's initial load: start:0, end:50, skipTotalCount: true
+        client.query(path, { start: 0, end: 50, skipTotalCount: true })
+            .then(data => {
+                const end = performance.now();
+                const duration = end - start;
+                const msg = `[SpeedTest] Fetched ${data.rows ? data.rows.length : 0} rows in ${duration.toFixed(2)}ms`;
+                console.log(msg);
+                alert(msg);
+            })
+            .catch(err => {
+                const end = performance.now();
+                console.error(`[SpeedTest] Failed after ${(end - start).toFixed(2)}ms`, err);
+                alert(`[SpeedTest] Failed: ${err.message}`);
+            });
+    };
+
     return (
         <div style={{ 
             height: '40px', 
@@ -337,6 +363,15 @@ const Navbar = () => {
                     }}
                 />
             </div>
+            {isTable && (
+                 <button
+                    onClick={runSpeedTest}
+                    style={{ background: '#e74c3c', border: 'none', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontWeight: 'bold', color: '#fff', fontSize: '12px' }}
+                    title="Run Speed Test (50 rows)"
+                >
+                    Test Speed
+                </button>
+            )}
             {window.go && (
                 <button 
                     onClick={() => client.openDatabase().then(p => p && navigate(`/${p}`))}
