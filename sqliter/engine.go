@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/banquet/sqlite"
@@ -13,13 +14,48 @@ import (
 
 // Engine handles the core logic, agnostic of HTTP or Wails
 type Engine struct {
-	config *Config
+	config  *Config
+	dbCache map[string]*sql.DB
+	dbMutex sync.Mutex
 }
 
 func NewEngine(cfg *Config) *Engine {
 	return &Engine{
-		config: cfg,
+		config:  cfg,
+		dbCache: make(map[string]*sql.DB),
 	}
+}
+
+// getDB returns a cached database connection or opens a new one
+func (e *Engine) getDB(path string) (*sql.DB, error) {
+	e.dbMutex.Lock()
+	defer e.dbMutex.Unlock()
+
+	if e.dbCache == nil {
+		e.dbCache = make(map[string]*sql.DB)
+	}
+
+	if db, ok := e.dbCache[path]; ok {
+		return db, nil
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Limit to 1 connection to prevent locking issues and ensure consistent state
+	db.SetMaxOpenConns(1)
+
+	// Apply PRAGMAs
+	// Note: With SetMaxOpenConns(1), this is safe as there is only one connection.
+	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
+		// Log error if possible, but don't fail hard
+		fmt.Printf("Error setting PRAGMA: %v\n", err)
+	}
+
+	e.dbCache[path] = db
+	return db, nil
 }
 
 type FileEntry struct {
@@ -70,11 +106,11 @@ func (e *Engine) ListTables(dbRelPath string) ([]TableInfo, error) {
 	}
 
 	dbPath := filepath.Join(e.config.ServeFolder, dbRelPath)
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := e.getDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening DB: %w", err)
 	}
-	defer db.Close()
+	// db is cached, do not close
 
 	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
@@ -165,15 +201,11 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 	}
 
 	dbPath := filepath.Join(e.config.ServeFolder, dataSetPath)
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := e.getDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening DB: %w", err)
 	}
-	defer db.Close()
-
-	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
-		// Just log? Logic in server was just logging error.
-	}
+	// db is cached, do not close
 
 	// Handle case where table name is missing
 	if bq.Table == "" {
