@@ -65,22 +65,23 @@ func TestApiIntegration(t *testing.T) {
 	t.Run("Sorting (ASC)", func(t *testing.T) {
 		// sortCol=age, sortDir=asc -> Dave (20) should be first
 		_, body := doRequest("db=test.db&table=users&sortCol=age&sortDir=asc")
-		rows := body["rows"].([]interface{})
-		firstRow := rows[0].(map[string]interface{})
+		values := body["values"].([]interface{})
+		firstRow := values[0].([]interface{})
 
-		if firstRow["name"] != "Dave" {
-			t.Errorf("Expected Dave first, got %v", firstRow["name"])
+		// Columns: id, name, age -> name is index 1
+		if firstRow[1] != "Dave" {
+			t.Errorf("Expected Dave first, got %v", firstRow[1])
 		}
 	})
 
 	t.Run("Sorting (DESC)", func(t *testing.T) {
 		// sortCol=age, sortDir=desc -> Eve (40) should be first
 		_, body := doRequest("db=test.db&table=users&sortCol=age&sortDir=desc")
-		rows := body["rows"].([]interface{})
-		firstRow := rows[0].(map[string]interface{})
+		values := body["values"].([]interface{})
+		firstRow := values[0].([]interface{})
 
-		if firstRow["name"] != "Eve" {
-			t.Errorf("Expected Eve first, got %v", firstRow["name"])
+		if firstRow[1] != "Eve" {
+			t.Errorf("Expected Eve first, got %v", firstRow[1])
 		}
 	})
 
@@ -88,17 +89,17 @@ func TestApiIntegration(t *testing.T) {
 		// start=1, end=3 -> Should return 2 rows (offset 1, limit 2).
 		// Sorted by name implicit/default? No, let's force sort to be deterministic.
 		_, body := doRequest("db=test.db&table=users&sortCol=name&sortDir=asc&start=1&end=3")
-		rows := body["rows"].([]interface{})
+		values := body["values"].([]interface{})
 
 		// Order: Alice, Bob, Charlie, Dave, Eve
 		// Offset 1 (Bob), Limit 2 (Bob, Charlie)
-		if len(rows) != 2 {
-			t.Errorf("Expected 2 rows, got %d", len(rows))
+		if len(values) != 2 {
+			t.Errorf("Expected 2 rows, got %d", len(values))
 		}
 
-		r0 := rows[0].(map[string]interface{})
-		if r0["name"] != "Bob" {
-			t.Errorf("Expected Bob at index 0 (was offset 1), got %v", r0["name"])
+		r0 := values[0].([]interface{})
+		if r0[1] != "Bob" {
+			t.Errorf("Expected Bob at index 0 (was offset 1), got %v", r0[1])
 		}
 	})
 
@@ -108,13 +109,13 @@ func TestApiIntegration(t *testing.T) {
 		filterJSON := `{"name":{"filterType":"text","type":"equals","filter":"Charlie"}}`
 		_, body := doRequest(fmt.Sprintf("db=test.db&table=users&filterModel=%s", filterJSON))
 
-		rows := body["rows"].([]interface{})
-		if len(rows) != 1 {
-			t.Errorf("Expected 1 row for Charlie, got %d", len(rows))
+		values := body["values"].([]interface{})
+		if len(values) != 1 {
+			t.Errorf("Expected 1 row for Charlie, got %d", len(values))
 		}
-		r0 := rows[0].(map[string]interface{})
-		if r0["name"] != "Charlie" {
-			t.Errorf("Expected Charlie, got %v", r0["name"])
+		r0 := values[0].([]interface{})
+		if r0[1] != "Charlie" {
+			t.Errorf("Expected Charlie, got %v", r0[1])
 		}
 	})
 
@@ -124,10 +125,10 @@ func TestApiIntegration(t *testing.T) {
 		filterJSON := `{"age":{"filterType":"number","type":"greaterThan","filter":30}}`
 		_, body := doRequest(fmt.Sprintf("db=test.db&table=users&filterModel=%s", filterJSON))
 
-		rows := body["rows"].([]interface{})
+		values := body["values"].([]interface{})
 		// Note: Charlie is 35, Eve is 40. Alice is 30 (not greater).
-		if len(rows) != 2 {
-			t.Errorf("Expected 2 rows > 30, got %d", len(rows))
+		if len(values) != 2 {
+			t.Errorf("Expected 2 rows > 30, got %d", len(values))
 		}
 	})
 }

@@ -45,6 +45,19 @@ export class HttpClient extends DataClient {
         const res = await fetch(this._getUrl('/sqliter/rows', params));
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+
+        // Transform values (array of arrays) back to array of objects for frontend consumption
+        if (data.values && data.columns) {
+            const { values, columns } = data;
+            data.rows = values.map(row => {
+                const obj = {};
+                columns.forEach((col, index) => {
+                    obj[col] = row[index];
+                });
+                return obj;
+            });
+        }
+
         return data;
     }
 }

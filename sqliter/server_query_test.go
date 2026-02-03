@@ -50,18 +50,19 @@ func TestApiQueryTable_ImplicitTable(t *testing.T) {
 		t.Logf("Body: %v", body)
 	} else {
 		var body struct {
-			Rows []map[string]interface{} `json:"rows"`
-			SQL  string                   `json:"sql"`
+			Values [][]interface{} `json:"values"`
+			SQL    string          `json:"sql"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			t.Errorf("Failed to decode response: %v", err)
 		}
-		if len(body.Rows) != 1 {
-			t.Errorf("Expected 1 row, got %d", len(body.Rows))
+		if len(body.Values) != 1 {
+			t.Errorf("Expected 1 row, got %d", len(body.Values))
 		}
 		// Verify columns
-		row := body.Rows[0]
-		if row["a"] != "1" || row["b"] != "2" {
+		row := body.Values[0]
+		// Columns are likely a, b in order, but let's assume so for this test as we selected a,b
+		if row[0] != "1" || row[1] != "2" {
 			t.Errorf("Unexpected row data: %v", row)
 		}
 	}
@@ -118,15 +119,15 @@ func TestApiQueryTable_LimitZero(t *testing.T) {
 	}
 
 	var body struct {
-		Rows    []map[string]interface{} `json:"rows"`
-		Columns []string                 `json:"columns"`
+		Values  [][]interface{} `json:"values"`
+		Columns []string        `json:"columns"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Errorf("Failed to decode response: %v", err)
 	}
 
-	if len(body.Rows) != 0 {
-		t.Errorf("Expected 0 rows, got %d", len(body.Rows))
+	if len(body.Values) != 0 {
+		t.Errorf("Expected 0 rows, got %d", len(body.Values))
 	}
 
 	if len(body.Columns) == 0 {
