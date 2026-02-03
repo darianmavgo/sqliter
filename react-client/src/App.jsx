@@ -62,7 +62,9 @@ const FileBrowser = ({ path }) => {
         cellRenderer: (params) => {
             const val = params.value;
             if (!val) return null;
-            const fullPath = path ? `${path}/${val}` : val;
+            // Avoid double slashes if path already ends with /
+            const safePath = path ? path.replace(/\/+$/, '') : '';
+            const fullPath = safePath ? `${safePath}/${val}` : val;
             return <Link to={`/${fullPath}`} style={{color: '#61dafb'}}>{val}</Link>;
         }
     },
@@ -170,8 +172,8 @@ const GridView = ({ db, table, rest }) => {
          if (rest) {
              path += `/${rest}`;
          }
-         // Request first 50 rows immediately to get columns + data
-         client.query(path, { start: 0, end: 50, skipTotalCount: true })
+         // Request first 200 rows immediately to get columns + data
+         client.query(path, { start: 0, end: 200, skipTotalCount: true })
             .then(data => {
                 if (data.columns) {
                     setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
@@ -193,8 +195,7 @@ const GridView = ({ db, table, rest }) => {
                     console.log("Using initial data for first block");
                     const rows = initialData.current;
                     initialData.current = null; // Clear it so we don't reuse it inappropriately
-                    // If rows < 50, we know the exact count
-                    const lastRow = rows.length < 50 ? rows.length : -1;
+                    const lastRow = rows.length < 200 ? rows.length : -1;
                     wsParams.successCallback(rows, lastRow);
                     return;
                 }
@@ -241,7 +242,7 @@ const GridView = ({ db, table, rest }) => {
                 columnDefs={colDefs}
                 rowModelType={'infinite'}
                 onGridReady={onGridReady}
-                cacheBlockSize={50}
+                cacheBlockSize={200}
                 maxBlocksInCache={10}
                 rowHeight={32}
                 headerHeight={32}

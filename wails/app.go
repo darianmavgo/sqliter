@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/darianmavgo/sqliter/sqliter"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -79,17 +80,21 @@ func expandHome(path string) string {
 
 func (a *App) ListFiles(dir string) ([]sqliter.FileEntry, error) {
 	dir = expandHome(dir)
-	return a.engine.ListFiles(dir)
+	// Use app context or TODO. App context is cancelled on shutdown.
+	return a.engine.ListFiles(a.ctx, dir)
 }
 
 func (a *App) ListTables(db string) ([]sqliter.TableInfo, error) {
 	db = expandHome(db)
-	return a.engine.ListTables(db)
+	return a.engine.ListTables(a.ctx, db)
 }
 
 func (a *App) Query(opts sqliter.QueryOptions) (*sqliter.QueryResult, error) {
+	start := time.Now()
 	opts.BanquetPath = expandHome(opts.BanquetPath)
-	return a.engine.Query(opts)
+	res, err := a.engine.Query(a.ctx, opts)
+	fmt.Printf("[Wails.App.Query] Took %v\n", time.Since(start))
+	return res, err
 }
 
 // OpenFile is called when macOS sends a file open event

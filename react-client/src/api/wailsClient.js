@@ -41,7 +41,10 @@ export class WailsClient extends DataClient {
             queryOpts.FilterModelJSON = JSON.stringify(options.filterModel);
          }
 
+         const timerLabel = `[WailsClient] Query ${Date.now()}-${Math.random()}`;
+         console.time(timerLabel);
          const response = await window.go.wails.App.Query(queryOpts);
+         console.timeEnd(timerLabel);
 
          // Transform values (array of arrays) back to array of objects for frontend consumption
          if (response.values && response.columns) {

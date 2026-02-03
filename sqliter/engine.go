@@ -1,25 +1,78 @@
 package sqliter
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/darianmavgo/banquet"
 	"github.com/darianmavgo/banquet/sqlite"
+	_ "modernc.org/sqlite" // Register modernc driver
 )
 
 // Engine handles the core logic, agnostic of HTTP or Wails
 type Engine struct {
 	config *Config
+
+	mu    sync.Mutex
+	conns map[string]*sql.DB
 }
 
 func NewEngine(cfg *Config) *Engine {
 	return &Engine{
 		config: cfg,
+		conns:  make(map[string]*sql.DB),
 	}
+}
+
+// CloseAll closes all cached database connections
+func (e *Engine) CloseAll() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for path, db := range e.conns {
+		db.Close()
+		delete(e.conns, path)
+	}
+}
+
+// getDBConnection returns a cached connection or opens a new one
+func (e *Engine) getDBConnection(ctx context.Context, dbPath string) (*sql.DB, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Check if already open
+	if db, ok := e.conns[dbPath]; ok {
+		// Ping to ensure it's still alive
+		if err := db.PingContext(ctx); err == nil {
+			return db, nil
+		}
+		// If ping fails, close and remove to reopen
+		db.Close()
+		delete(e.conns, dbPath)
+	}
+
+	// Open new connection with WAL mode enabled for better concurrency
+	// Note: modernc.org/sqlite registers as "sqlite"
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", dbPath)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set some reasonable defaults for the pool
+	// modernc_sqlite handles concurrency, but let's keep it reasonable per connection object
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute) // Close idle connections after 5 mins
+
+	e.conns[dbPath] = db
+
+	return db, nil
 }
 
 type FileEntry struct {
@@ -28,7 +81,7 @@ type FileEntry struct {
 }
 
 // ListFiles returns a list of files in a directory (safe, strict relative paths)
-func (e *Engine) ListFiles(dirRelPath string) ([]FileEntry, error) {
+func (e *Engine) ListFiles(ctx context.Context, dirRelPath string) ([]FileEntry, error) {
 	if strings.Contains(dirRelPath, "..") {
 		return nil, fmt.Errorf("invalid path")
 	}
@@ -64,19 +117,20 @@ type TableInfo struct {
 	Type string `json:"type"`
 }
 
-func (e *Engine) ListTables(dbRelPath string) ([]TableInfo, error) {
+func (e *Engine) ListTables(ctx context.Context, dbRelPath string) ([]TableInfo, error) {
 	if strings.Contains(dbRelPath, "..") {
 		return nil, fmt.Errorf("invalid path")
 	}
 
 	dbPath := filepath.Join(e.config.ServeFolder, dbRelPath)
-	db, err := sql.Open("sqlite", dbPath)
+
+	// Use cached connection
+	db, err := e.getDBConnection(ctx, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening DB: %w", err)
 	}
-	defer db.Close()
 
-	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
+	rows, err := db.QueryContext(ctx, "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
@@ -113,11 +167,16 @@ type QueryResult struct {
 	SQL        string          `json:"sql"`
 }
 
-func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
+func (e *Engine) Query(ctx context.Context, opts QueryOptions) (*QueryResult, error) {
+	start := time.Now()
+	last := start
+
 	bq, err := banquet.ParseNested(opts.BanquetPath)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL: %w", err)
 	}
+	fmt.Printf("[Engine.Query] ParseNested took %v\n", time.Since(last))
+	last = time.Now()
 
 	// Override limit/offset if provided
 	if opts.AllowOverride {
@@ -165,19 +224,27 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 	}
 
 	dbPath := filepath.Join(e.config.ServeFolder, dataSetPath)
-	db, err := sql.Open("sqlite", dbPath)
+
+	// Use cached connection
+	db, err := e.getDBConnection(ctx, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening DB: %w", err)
 	}
-	defer db.Close()
 
-	if _, err := db.Exec("PRAGMA page_size = 65536; PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
-		// Just log? Logic in server was just logging error.
+	fmt.Printf("[Engine.Query] DB Open/Fetch took %v\n", time.Since(last))
+	last = time.Now()
+
+	// Run harmless optimization pragmas once might be risky if we assume strict logic.
+	// But `cache_size` is connection-local and safe.
+	if _, err := db.ExecContext(ctx, "PRAGMA cache_size = -2000; PRAGMA case_sensitive_like = OFF;"); err != nil {
+		// ignore
 	}
+	fmt.Printf("[Engine.Query] PRAGMAs took %v\n", time.Since(last))
+	last = time.Now()
 
 	// Handle case where table name is missing
 	if bq.Table == "" {
-		rows, err := db.Query("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
+		rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")
 		if err != nil {
 			return nil, fmt.Errorf("failed to list tables: %w", err)
 		}
@@ -204,18 +271,25 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 	// Get total count
 	var totalCount int = -1
 	if !opts.SkipTotalCount {
+		countStart := time.Now()
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", sqlite.QuoteIdentifier(bq.Table))
 		if bq.Where != "" {
 			countQuery += " WHERE " + bq.Where
 		}
-		_ = db.QueryRow(countQuery).Scan(&totalCount)
+		_ = db.QueryRowContext(ctx, countQuery).Scan(&totalCount)
+		fmt.Printf("[Engine.Query] TotalCount query took %v\n", time.Since(countStart))
+	} else {
+		fmt.Printf("[Engine.Query] TotalCount SKIPPED\n")
 	}
+	last = time.Now()
 
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
 	}
 	defer rows.Close()
+	fmt.Printf("[Engine.Query] Main Query Exec took %v\n", time.Since(last))
+	last = time.Now()
 
 	columns, err := rows.Columns()
 	if err != nil {
@@ -251,6 +325,8 @@ func (e *Engine) Query(opts QueryOptions) (*QueryResult, error) {
 		}
 		resp.Values = append(resp.Values, rowData)
 	}
+	fmt.Printf("[Engine.Query] Row Scan took %v\n", time.Since(last))
+	fmt.Printf("[Engine.Query] TOTAL DURATION: %v\n", time.Since(start))
 
 	return resp, nil
 }

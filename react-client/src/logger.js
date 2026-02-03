@@ -7,6 +7,11 @@ const originalError = console.error;
 const originalInfo = console.info;
 
 const sendLog = (level, args) => {
+    // If in Wails (desktop), do not send logs to HTTP endpoint
+    if (window.runtime) {
+        return;
+    }
+
     try {
         // Convert args to a single string or relevant object
         const message = args.map(arg => {

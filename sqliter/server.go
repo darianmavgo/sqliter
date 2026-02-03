@@ -168,7 +168,7 @@ func (s *Server) handleClientLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiListFiles(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
-	files, err := s.engine.ListFiles(dir)
+	files, err := s.engine.ListFiles(r.Context(), dir)
 	if err != nil {
 		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -185,7 +185,7 @@ func (s *Server) apiListTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tables, err := s.engine.ListTables(dbName)
+	tables, err := s.engine.ListTables(r.Context(), dbName)
 	if err != nil {
 		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -263,7 +263,7 @@ func (s *Server) apiQueryTable(w http.ResponseWriter, r *http.Request) {
 		opts.FilterWhere = filterWhere
 	}
 
-	result, err := s.engine.Query(opts)
+	result, err := s.engine.Query(r.Context(), opts)
 	if err != nil {
 		s.writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
