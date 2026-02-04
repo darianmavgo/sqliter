@@ -13,3 +13,5 @@ export function OpenDatabase():Promise<string>;
 export function OpenFile(arg1:string):Promise<void>;
 
 export function Query(arg1:sqliter.QueryOptions):Promise<sqliter.QueryResult>;
+
+export function StreamQuery(arg1:sqliter.QueryOptions,arg2:string):Promise<void>;

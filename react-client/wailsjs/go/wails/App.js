@@ -25,3 +25,7 @@ export function OpenFile(arg1) {
 export function Query(arg1) {
   return window['go']['wails']['App']['Query'](arg1);
 }
+
+export function StreamQuery(arg1, arg2) {
+  return window['go']['wails']['App']['StreamQuery'](arg1, arg2);
+}

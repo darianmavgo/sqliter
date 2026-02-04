@@ -97,6 +97,35 @@ func (a *App) Query(opts sqliter.QueryOptions) (*sqliter.QueryResult, error) {
 	return res, err
 }
 
+// StreamQuery starts a streaming query using the provided QueryID.
+// The actual data is pumped via Wails Events.
+func (a *App) StreamQuery(opts sqliter.QueryOptions, queryID string) error {
+	opts.BanquetPath = expandHome(opts.BanquetPath)
+
+	// Run in background
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Recovered from panic in StreamQuery: %v\n", r)
+				runtime.EventsEmit(a.ctx, fmt.Sprintf("sqliter:stream:error:%s", queryID), fmt.Sprintf("Internal Error: %v", r))
+			}
+		}()
+
+		err := a.engine.QueryStream(a.ctx, opts, func(chunk sqliter.QueryResultChunk) {
+			// Emit chunk
+			runtime.EventsEmit(a.ctx, fmt.Sprintf("sqliter:stream:chunk:%s", queryID), chunk)
+		})
+
+		if err != nil {
+			runtime.EventsEmit(a.ctx, fmt.Sprintf("sqliter:stream:error:%s", queryID), err.Error())
+		} else {
+			runtime.EventsEmit(a.ctx, fmt.Sprintf("sqliter:stream:end:%s", queryID), "done")
+		}
+	}()
+
+	return nil
+}
+
 // OpenFile is called when macOS sends a file open event
 func (a *App) OpenFile(filePath string) {
 	fmt.Println("Received OpenFile:", filePath)

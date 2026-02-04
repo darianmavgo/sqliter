@@ -164,98 +164,98 @@ const TableList = ({ db }) => {
 
 const GridView = ({ db, table, rest }) => {
     const [colDefs, setColDefs] = useState([]);
-    const initialData = React.useRef(null);
+    const gridApiRef = React.useRef(null);
+    const [status, setStatus] = useState("Loading...");
 
-    // Fetch initial column defs and first 50 rows
+    // Streaming Logic
     useEffect(() => {
          let path = `/${db}/${table}`;
          if (rest) {
              path += `/${rest}`;
          }
-         // Request first 200 rows immediately to get columns + data
-         client.query(path, { start: 0, end: 200, skipTotalCount: true })
-            .then(data => {
-                if (data.columns) {
-                    setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
-                }
-                // Cache the initial rows to feed the grid immediately
-                initialData.current = data.rows;
-            })
-            .catch(console.error);
-    }, [db, table, rest]);
 
-    const onGridReady = useCallback((params) => {
-        const dataSource = {
-            rowCount: undefined,
-            getRows: (wsParams) => {
-                const { startRow, endRow, sortModel } = wsParams;
-                
-                // Optimization: Use pre-fetched data for the first block if available
-                if (startRow === 0 && initialData.current && (!sortModel.length) && (!wsParams.filterModel || Object.keys(wsParams.filterModel).length === 0)) {
-                    console.log("Using initial data for first block");
-                    const rows = initialData.current;
-                    initialData.current = null; // Clear it so we don't reuse it inappropriately
-                    const lastRow = rows.length < 200 ? rows.length : -1;
-                    wsParams.successCallback(rows, lastRow);
-                    return;
-                }
+         // Reset grid data when path changes
+         if (gridApiRef.current) {
+             gridApiRef.current.setGridOption('rowData', []);
+         }
+         setColDefs([]);
+         setStatus("Connecting...");
 
-                let path = `/${db}/${table}`;
-                if (rest) {
-                    path += `/${rest}`;
-                }
-                
-                const apiParams = {
-                    start: startRow,
-                    end: endRow,
-                    skipTotalCount: true
-                };
-                
-                if (sortModel.length > 0) {
-                  const { colId, sort } = sortModel[0];
-                  apiParams.sortCol = colId;
-                  apiParams.sortDir = sort;
-                }
+         // Use Stream if available (Wails), else fallback to single fetch (HTTP)
+         if (client.streamQuery) {
+             let cancelFunc = null;
 
-                if (wsParams.filterModel && Object.keys(wsParams.filterModel).length > 0) {
-                    apiParams.filterModel = wsParams.filterModel;
-                }
-
-                client.query(path, apiParams)
-                    .then(data => {
-                         // Calculate lastRow for infinite scrolling if partial page returned
-                         const requestedRows = endRow - startRow;
-                         let lastRow = -1;
-                         if (data.totalCount !== -1) {
-                             lastRow = data.totalCount;
-                         } else if (data.rows.length < requestedRows) {
-                             // If we got fewer rows than requested, we reached the end
-                             lastRow = startRow + data.rows.length;
+             const startStream = async () => {
+                 cancelFunc = await client.streamQuery(path, {
+                     start: 0,
+                     // Default safe limit to prevent browser crash on massive tables
+                     // User can override via UI filters later (todo)
+                     end: 10000 
+                 }, {
+                     onSchema: ({ columns, totalCount }) => {
+                         if (gridApiRef.current) {
+                             const defs = columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true }));
+                             gridApiRef.current.setGridOption('columnDefs', defs);
+                             setColDefs(defs);
                          }
-                         wsParams.successCallback(data.rows, lastRow);
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        wsParams.failCallback();
-                    })
-            }
-        };
-        params.api.setGridOption('datasource', dataSource);
+                     },
+                     onRows: (rows) => {
+                         if (gridApiRef.current) {
+                             gridApiRef.current.applyTransactionAsync({ add: rows });
+                             setStatus(`Streaming... ${gridApiRef.current.getDisplayedRowCount()} rows`);
+                         }
+                     },
+                     onEnd: () => {
+                        setStatus("Complete");
+                     },
+                     onError: (err) => {
+                         console.error("Stream error:", err);
+                         setStatus(`Error: ${err}`);
+                     }
+                 });
+             };
+
+             startStream();
+
+             return () => {
+                 if (cancelFunc) cancelFunc();
+             };
+         } else {
+             // Fallback for HTTP Mode (Non-Streaming)
+             client.query(path, { start: 0, end: 1000 })
+                .then(data => {
+                    if (data.columns) {
+                        setColDefs(data.columns.map(c => ({ field: c, filter: true, sortable: true, resizable: true })));
+                    }
+                    if (gridApiRef.current) {
+                        gridApiRef.current.setGridOption('rowData', data.rows);
+                    }
+                    setStatus("Loaded (Limit 1000)");
+                })
+                .catch(err => setStatus(`Error: ${err.message}`));
+         }
     }, [db, table, rest]);
+
+    const onGridReady = (params) => {
+        gridApiRef.current = params.api;
+    };
 
     return (
-        <div style={{ width: '100%', height: '100%' }} className="ag-theme-alpine-dark">
-            <AgGridReact
-                className="ag-theme-alpine-dark"
-                theme="legacy"
-                columnDefs={colDefs}
-                rowModelType={'infinite'}
-                onGridReady={onGridReady}
-                cacheBlockSize={200}
-                maxBlocksInCache={1}
-                rowHeight={32}
-                headerHeight={32}
-            />
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }} className="ag-theme-alpine-dark">
+            <div style={{ padding: '4px 8px', fontSize: '12px', color: '#888', background: '#20232a', borderBottom: '1px solid #333' }}>
+                {status}
+            </div>
+            <div style={{ flex: 1 }}>
+                <AgGridReact
+                    className="ag-theme-alpine-dark"
+                    theme="legacy"
+                    columnDefs={colDefs}
+                    rowModelType={'clientSide'}
+                    onGridReady={onGridReady}
+                    rowHeight={32}
+                    headerHeight={32}
+                />
+            </div>
         </div>
     );
 };
